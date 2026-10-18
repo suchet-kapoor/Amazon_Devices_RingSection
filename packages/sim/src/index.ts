@@ -9,4 +9,5 @@
 export * from './fake-ring.js';
 export * from './frame-source.js';
 export * from './frames.js';
+export * from './generator.js';
 export * from './webhook-sender.js';
