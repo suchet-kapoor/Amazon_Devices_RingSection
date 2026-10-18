@@ -162,6 +162,8 @@ export async function ensureFreshAccessToken(
   farmId: string,
   options: { fetchImpl?: typeof fetch; nowMs?: number } = {},
 ): Promise<FreshAccessToken> {
+  // shortcut: pasted tokens are never refreshed, re-paste when Ring answers 401;
+  // upgrade by using the linked flow's vault refresh (below) per farm.
   if (config.ringAccessToken) {
     return { accessToken: config.ringAccessToken, tokenRowId: null };
   }
