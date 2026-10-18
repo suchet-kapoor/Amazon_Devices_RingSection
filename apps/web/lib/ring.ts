@@ -102,10 +102,55 @@ export interface FreshAccessToken {
   tokenRowId: string;
 }
 
+export type TokenRow = typeof ringTokens.$inferSelect;
+
+/**
+ * Refresh one stored token row in place and return the new access token.
+ *
+ * The refresh token is single-use: the response's new refresh token replaces
+ * the sealed one. 400/401 from the token endpoint means the refresh token is
+ * dead - that is a "re-link" state, not an outage. Anything else (5xx,
+ * network) bubbles up.
+ */
+export async function refreshStoredAccessToken(
+  db: Db,
+  config: RingConfig,
+  row: TokenRow,
+  fetchImpl?: typeof fetch,
+  nowMs: number = Date.now(),
+): Promise<string> {
+  const key = parseTokenEncKey(config.tokenEncKey);
+  const refreshToken = decryptToken(row.refreshEnc, key);
+  if (!refreshToken) {
+    throw new RelinkRequiredError('Stored Ring token set has no refresh token');
+  }
+
+  let refreshed: RingTokenSet;
+  try {
+    refreshed = await createRingClient(config, fetchImpl).refreshAccessToken(refreshToken);
+  } catch (error) {
+    if (error instanceof RingApiError && (error.status === 400 || error.status === 401)) {
+      throw new RelinkRequiredError(`Ring rejected the stored refresh token (${error.status})`);
+    }
+    throw error;
+  }
+
+  await db
+    .update(ringTokens)
+    .set({
+      accessEnc: encryptToken(refreshed.accessToken, key),
+      refreshEnc: encryptToken(refreshed.refreshToken ?? refreshToken, key),
+      accessExpiresAt: new Date(nowMs + refreshed.expiresInSeconds * 1000),
+      updatedAt: new Date(),
+    })
+    .where(eq(ringTokens.id, row.id));
+
+  return refreshed.accessToken;
+}
+
 /**
  * Return a usable access token for the farm's linked Ring account, refreshing
- * proactively before the ~4 h expiry (F1 criterion 7). The refresh token is
- * single-use: the response's new refresh token replaces the stored one.
+ * proactively before the ~4 h expiry (F1 criterion 7).
  */
 export async function ensureFreshAccessToken(
   db: Db,
@@ -123,38 +168,12 @@ export async function ensureFreshAccessToken(
   if (!row) throw new RelinkRequiredError('No linked Ring account for this farm');
 
   const nowMs = options.nowMs ?? Date.now();
-  const key = parseTokenEncKey(config.tokenEncKey);
   const expiresAtMs = row.accessExpiresAt?.getTime() ?? 0;
   if (expiresAtMs - nowMs > REFRESH_SKEW_MS) {
+    const key = parseTokenEncKey(config.tokenEncKey);
     return { accessToken: decryptToken(row.accessEnc, key), tokenRowId: row.id };
   }
 
-  const refreshToken = decryptToken(row.refreshEnc, key);
-  if (!refreshToken) {
-    throw new RelinkRequiredError('Stored Ring token set has no refresh token');
-  }
-
-  let refreshed: RingTokenSet;
-  try {
-    refreshed = await createRingClient(config, options.fetchImpl).refreshAccessToken(refreshToken);
-  } catch (error) {
-    // 400/401 from the token endpoint means the refresh token is dead - that is
-    // a "re-link" state, not an outage. Anything else (5xx, network) bubbles up.
-    if (error instanceof RingApiError && (error.status === 400 || error.status === 401)) {
-      throw new RelinkRequiredError(`Ring rejected the stored refresh token (${error.status})`);
-    }
-    throw error;
-  }
-
-  await db
-    .update(ringTokens)
-    .set({
-      accessEnc: encryptToken(refreshed.accessToken, key),
-      refreshEnc: encryptToken(refreshed.refreshToken ?? refreshToken, key),
-      accessExpiresAt: new Date(nowMs + refreshed.expiresInSeconds * 1000),
-      updatedAt: new Date(),
-    })
-    .where(eq(ringTokens.id, row.id));
-
-  return { accessToken: refreshed.accessToken, tokenRowId: row.id };
+  const accessToken = await refreshStoredAccessToken(db, config, row, options.fetchImpl, nowMs);
+  return { accessToken, tokenRowId: row.id };
 }
