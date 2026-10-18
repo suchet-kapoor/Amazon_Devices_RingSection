@@ -3,9 +3,10 @@ import { z } from 'zod';
 
 import { ZONE_KINDS } from '@predator-guard/ring';
 
+import { loadConfig } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { assignDeviceZone } from '@/lib/devices';
-import { getPrimaryFarm } from '@/lib/farms';
+import { ensureFarm } from '@/lib/farms';
 
 /**
  * `POST /api/devices/{ringDeviceId}/zone` (F3 criterion 3): map a camera to a
@@ -32,7 +33,7 @@ export async function POST(
   }
 
   const db = await getDb();
-  const farm = await getPrimaryFarm(db);
+  const farm = await ensureFarm(db, loadConfig());
   if (!farm) {
     return NextResponse.json(
       { error: 'no_farm', detail: 'No farm is linked yet. Link a Ring account first.' },

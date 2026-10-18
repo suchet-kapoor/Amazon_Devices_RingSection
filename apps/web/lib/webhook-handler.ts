@@ -60,6 +60,13 @@ export async function handleWebhookRequest(
 ): Promise<WebhookResult> {
   const log = deps.log ?? defaultLog;
 
+  // An unconfigured signing key would accept a signature anyone can compute.
+  // Refuse instead: 503 so Ring retries once the key is set.
+  if (!deps.hmacKey) {
+    log({ stage: 'webhook.rejected', reason: 'signing_key_missing' });
+    return { status: 503, body: { error: 'webhook_verification_unconfigured' } };
+  }
+
   if (!signature || !verifyWebhookSignature(deps.hmacKey, rawBody, signature)) {
     log({ stage: 'webhook.rejected', reason: 'invalid_signature' });
     return { status: 401, body: { error: 'invalid_signature' } };

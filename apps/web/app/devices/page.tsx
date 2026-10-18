@@ -4,8 +4,9 @@ import { asc, eq } from 'drizzle-orm';
 import { devices, zones } from '@predator-guard/db';
 import type { ZoneKind } from '@predator-guard/ring';
 
+import { loadConfig } from '@/lib/config';
 import { getDb } from '@/lib/db';
-import { getPrimaryFarm } from '@/lib/farms';
+import { ensureFarm } from '@/lib/farms';
 
 import { SyncButton } from './sync-button';
 import { ZoneSelect } from './zone-select';
@@ -20,7 +21,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function DevicesPage() {
   const db = await getDb();
-  const farm = await getPrimaryFarm(db);
+  const farm = await ensureFarm(db, loadConfig());
 
   if (!farm) {
     return (

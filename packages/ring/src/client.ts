@@ -255,9 +255,13 @@ export class RingClient {
       throw new RingApiError('GET /v1/users/me returned no account id', 200, null, null, body);
     }
     const attributes = isRecord(data.attributes) ? data.attributes : {};
+    // Docs return first_name + last_name; some payloads carry a single `name`.
+    const fullName = [attributes.first_name, attributes.last_name]
+      .filter((part): part is string => typeof part === 'string' && part.trim() !== '')
+      .join(' ');
     return {
       accountId,
-      name: typeof attributes.name === 'string' ? attributes.name : null,
+      name: fullName || (typeof attributes.name === 'string' ? attributes.name : null),
       email: typeof attributes.email === 'string' ? attributes.email : null,
     };
   }

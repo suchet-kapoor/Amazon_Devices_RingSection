@@ -5,7 +5,7 @@ import { devices, events } from '@predator-guard/db';
 
 import { loadConfig } from '@/lib/config';
 import { getDb } from '@/lib/db';
-import { getPrimaryFarm } from '@/lib/farms';
+import { ensureFarm } from '@/lib/farms';
 
 import { SimTools } from './sim-tools';
 
@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
 export default async function HomePage() {
   const db = await getDb();
   const config = loadConfig();
-  const farm = await getPrimaryFarm(db);
+  const farm = await ensureFarm(db, config);
 
   const deviceCount = farm
     ? (await db.select({ id: devices.id }).from(devices).where(eq(devices.farmId, farm.id))).length

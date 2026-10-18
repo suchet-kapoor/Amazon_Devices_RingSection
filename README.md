@@ -47,7 +47,21 @@ Open <http://localhost:3000> and:
 ### Real Ring or Postgres
 
 Copy `.env.example` to `.env` and fill in the credentials (`RING_SIM=1` forces the simulator
-even when credentials are present). For Postgres instead of PGlite:
+even when credentials are present).
+
+Fastest path with a real Ring account — one pasted token, nothing else:
+
+```bash
+RING_ACCESS_TOKEN=<access token from the Ring developer portal> npm run dev
+```
+
+The app reads the account from `GET /v1/users/me`, creates the farm for it, and *Sync devices
+from Ring* works with no linking step and nothing in the token vault. Access tokens are
+short-lived: paste a fresh one when Ring starts answering 401. Webhooks additionally need
+`RING_HMAC_KEY` — without it the webhook route answers 503 instead of accepting a signature
+nobody can verify.
+
+For Postgres instead of PGlite:
 
 ```bash
 docker compose up -d db

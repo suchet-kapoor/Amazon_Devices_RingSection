@@ -8,8 +8,9 @@ import { DEFAULT_API_BASE_URL, DEFAULT_OAUTH_BASE_URL } from '@predator-guard/ri
  * switch, never a code fork** (PLAN.md design rule 3). When no Ring
  * credentials are present in development we fill in simulator defaults -
  * credentials, HMAC key, token key and base URLs - so `npm run dev` works with
- * zero setup. In production, or when credentials are set, the real values are
- * required and a missing one throws with the exact variable name.
+ * zero setup. In production, or when credentials (or `RING_ACCESS_TOKEN`) are
+ * set, the real values are required and a missing one throws with the exact
+ * variable name.
  */
 
 /** Truthy spellings accepted for `RING_SIM`. */
@@ -50,6 +51,12 @@ export interface RingConfig {
   hmacKey: string;
   apiBaseUrl: string;
   oauthBaseUrl: string;
+  /**
+   * A Ring access token pasted into the environment (`RING_ACCESS_TOKEN`).
+   * When set, Ring calls use this one token: no account-linking step, no token
+   * vault row and no refresh - re-paste a fresh token when it expires.
+   */
+  ringAccessToken: string | undefined;
 }
 
 function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -65,17 +72,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RingConfig {
   const get = (name: string): string | undefined => readEnv(env, name);
 
   const explicitSim = TRUTHY.has((get('RING_SIM') ?? '').toLowerCase());
+  const ringAccessToken = get('RING_ACCESS_TOKEN');
   const ringConfigured = Boolean(
     get('RING_CLIENT_ID') && get('RING_CLIENT_SECRET') && get('RING_HMAC_KEY'),
   );
   const isProduction = env.NODE_ENV === 'production';
-  const isSim = explicitSim || (!isProduction && !ringConfigured);
+  // A pasted access token is real-Ring configuration on its own (RING_SIM still wins).
+  const isSim = explicitSim || (!isProduction && !ringConfigured && !ringAccessToken);
 
   const missing: string[] = [];
   /** In sim mode a variable may fall back to its simulator default. */
-  const resolve = (name: string, simDefault: string): string => {
+  const resolve = (name: string, simDefault: string, needed = true): string => {
     const value = get(name);
     if (value) return value;
+    // A credential this run never uses (the static token replaces the OAuth
+    // trio, and nothing is sealed without the vault) must not block startup.
+    if (!needed) return '';
     if (isSim) return simDefault;
     missing.push(name);
     return '';
@@ -85,13 +97,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RingConfig {
     isSim,
     databaseUrl: get('DATABASE_URL'),
     pgliteDataDir: get('PGLITE_DATA_DIR') ?? '.pglite',
-    tokenEncKey: resolve('TOKEN_ENC_KEY', SIM_DEFAULTS.tokenEncKey),
-    clientId: resolve('RING_CLIENT_ID', SIM_DEFAULTS.clientId),
-    clientSecret: resolve('RING_CLIENT_SECRET', SIM_DEFAULTS.clientSecret),
-    hmacKey: resolve('RING_HMAC_KEY', SIM_DEFAULTS.hmacKey),
+    tokenEncKey: resolve('TOKEN_ENC_KEY', SIM_DEFAULTS.tokenEncKey, !ringAccessToken),
+    clientId: resolve('RING_CLIENT_ID', SIM_DEFAULTS.clientId, !ringAccessToken),
+    clientSecret: resolve('RING_CLIENT_SECRET', SIM_DEFAULTS.clientSecret, !ringAccessToken),
+    // Webhooks are verified with this key whenever it is set; the route refuses
+    // to run without it (see `handleWebhookRequest`).
+    hmacKey: resolve('RING_HMAC_KEY', SIM_DEFAULTS.hmacKey, !ringAccessToken),
     apiBaseUrl: get('RING_API_BASE_URL') ?? (isSim ? SIM_DEFAULTS.apiBaseUrl : DEFAULT_API_BASE_URL),
     oauthBaseUrl:
       get('RING_OAUTH_BASE_URL') ?? (isSim ? SIM_DEFAULTS.oauthBaseUrl : DEFAULT_OAUTH_BASE_URL),
+    ringAccessToken,
   };
 
   if (missing.length > 0) {

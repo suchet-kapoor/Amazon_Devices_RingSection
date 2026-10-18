@@ -181,6 +181,21 @@ describe('users, devices and integrations', () => {
     expect((call.init.headers as Record<string, string>).authorization).toBe('Bearer access-1');
   });
 
+  it('joins first_name and last_name, as the docs return them', async () => {
+    const { fetchImpl } = scriptedFetch([
+      () =>
+        jsonResponse(200, {
+          data: {
+            id: 'acct-2',
+            type: 'users',
+            attributes: { first_name: 'John', last_name: 'Doe', email: 'j@example.com' },
+          },
+        }),
+    ]);
+    const profile = await makeClient(fetchImpl).getUsersMe('access-2');
+    expect(profile).toEqual({ accountId: 'acct-2', name: 'John Doe', email: 'j@example.com' });
+  });
+
   it('lists devices, merging includes per device id (not per type)', async () => {
     const { fetchImpl, calls } = scriptedFetch([
       () =>

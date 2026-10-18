@@ -143,6 +143,26 @@ describe('webhook intake - the M1 gate', () => {
     expect(await countRows(events)).toBe(eventsBefore);
   });
 
+  it('refuses to verify at all when no signing key is configured (503, not a forgeable pass)', async () => {
+    const built = buildMotionWebhook({
+      accountId: SIM_ACCOUNT_ID,
+      deviceId: SIM_DEVICES.pasture,
+      eventId: 'nokey-evt-1',
+      requestId: 'nokey-req-1',
+    });
+    const eventsBefore = await countRows(events);
+
+    const result = await handleWebhookRequest(
+      Buffer.from(built.rawBody),
+      signWebhookPayload('', built.rawBody),
+      { ...deps(), hmacKey: '' },
+    );
+
+    expect(result.status).toBe(503);
+    expect(result.body).toEqual({ error: 'webhook_verification_unconfigured' });
+    expect(await countRows(events)).toBe(eventsBefore);
+  });
+
   it('persists human events but never enqueues them (Stage 0 drop)', async () => {
     const built = buildMotionWebhook({
       accountId: SIM_ACCOUNT_ID,

@@ -5,7 +5,7 @@ import { RingApiError } from '@predator-guard/ring';
 import { loadConfig } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { syncDevices } from '@/lib/devices';
-import { getPrimaryFarm } from '@/lib/farms';
+import { ensureFarm } from '@/lib/farms';
 import { RelinkRequiredError } from '@/lib/ring';
 
 /**
@@ -19,7 +19,8 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(): Promise<NextResponse> {
   const db = await getDb();
-  const farm = await getPrimaryFarm(db);
+  const config = loadConfig();
+  const farm = await ensureFarm(db, config);
   if (!farm) {
     return NextResponse.json(
       { error: 'no_farm', detail: 'No farm is linked yet. Link a Ring account first.' },
@@ -27,7 +28,6 @@ export async function POST(): Promise<NextResponse> {
     );
   }
 
-  const config = loadConfig();
   try {
     const result = await syncDevices(db, config, { farmId: farm.id });
     return NextResponse.json({ status: 'synced', ...result });

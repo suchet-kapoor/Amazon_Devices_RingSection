@@ -99,7 +99,8 @@ export async function unlinkRingAccount(db: Db, ringAccountId: string): Promise<
 
 export interface FreshAccessToken {
   accessToken: string;
-  tokenRowId: string;
+  /** The stored token row, when the token came from the vault; null for `RING_ACCESS_TOKEN`. */
+  tokenRowId: string | null;
 }
 
 export type TokenRow = typeof ringTokens.$inferSelect;
@@ -151,6 +152,9 @@ export async function refreshStoredAccessToken(
 /**
  * Return a usable access token for the farm's linked Ring account, refreshing
  * proactively before the ~4 h expiry (F1 criterion 7).
+ *
+ * `RING_ACCESS_TOKEN` short-circuits the vault entirely: one pasted token, no
+ * link flow and no refresh - re-paste a fresh one when Ring expires it.
  */
 export async function ensureFreshAccessToken(
   db: Db,
@@ -158,6 +162,10 @@ export async function ensureFreshAccessToken(
   farmId: string,
   options: { fetchImpl?: typeof fetch; nowMs?: number } = {},
 ): Promise<FreshAccessToken> {
+  if (config.ringAccessToken) {
+    return { accessToken: config.ringAccessToken, tokenRowId: null };
+  }
+
   const rows = await db
     .select()
     .from(ringTokens)

@@ -7,7 +7,7 @@ import { createFakeRing, type FakeRing } from '@predator-guard/sim';
 
 import { loadConfig } from './config';
 import { assignDeviceZone, syncDevices } from './devices';
-import { createFarm } from './farms';
+import { createFarm, ensureFarm } from './farms';
 import { RelinkRequiredError } from './ring';
 
 /**
@@ -212,5 +212,69 @@ describe('assignDeviceZone', () => {
     expect(deviceRow.zoneId).toBeNull();
 
     expect(await assignDeviceZone(db, farmId, 'unknown-camera', 'coop')).toBeNull();
+  });
+});
+
+/**
+ * `RING_ACCESS_TOKEN`: one pasted token, real Ring, no link flow and no vault
+ * row. Own database so the "nothing linked yet" state is real.
+ */
+describe('syncDevices with RING_ACCESS_TOKEN', () => {
+  let tokenDb: Db;
+  let closeTokenDb: () => Promise<void>;
+
+  beforeAll(async () => {
+    const opened = await createDb({ pgliteDataDir: 'memory://' });
+    tokenDb = opened.db;
+    closeTokenDb = opened.close;
+  });
+
+  afterAll(async () => {
+    await closeTokenDb();
+  });
+
+  it('derives the farm from GET /v1/users/me, reuses it, and syncs with the env token', async () => {
+    const accountId = 'token-account-1';
+    // Without a token there is nothing to derive a farm from: still "not linked".
+    expect(await ensureFarm(tokenDb, config)).toBeNull();
+
+    const fake = createFakeRing({
+      accounts: [
+        {
+          accountId,
+          name: 'Token Farmer',
+          email: 'token@example.test',
+          devices: [
+            {
+              ringDeviceId: 'token-cam-1',
+              name: 'Token coop camera',
+              deviceType: 'camera',
+              online: true,
+              e2ee: false,
+              capabilities: {},
+              configurations: {},
+            },
+          ],
+        },
+      ],
+    });
+    const tokenConfig = loadConfig({
+      NODE_ENV: 'test',
+      RING_ACCESS_TOKEN: fake.issueAccessToken(accountId),
+    });
+    expect(tokenConfig.isSim).toBe(false);
+
+    const farm = await ensureFarm(tokenDb, tokenConfig, asFetch(fake));
+    expect(farm?.ringAccountId).toBe(accountId);
+    expect(farm?.name).toBe('Token Farmer');
+
+    const again = await ensureFarm(tokenDb, tokenConfig, asFetch(fake));
+    expect(again?.id).toBe(farm?.id); // reused, never duplicated
+
+    const result = await syncDevices(tokenDb, tokenConfig, {
+      farmId: farm!.id,
+      fetchImpl: asFetch(fake),
+    });
+    expect(result).toEqual({ farmId: farm!.id, synced: 1 });
   });
 });
