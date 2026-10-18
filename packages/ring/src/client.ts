@@ -1,5 +1,5 @@
 /**
- * The typed Ring Partner API client (FEATURES.md F1-F3).
+ * The typed Ring Partner API client (FEATURES.md F1-F4 + Event History).
  *
  * PLAN.md design rule 2: one module owns every outbound Ring call - typed,
  * retrying, token-aware. Design notes:
@@ -25,6 +25,13 @@ export const DEVICE_INCLUDE = 'status,capabilities,location,configurations';
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BASE_MS = 250;
 const DEFAULT_MAX_RETRY_DELAY_MS = 30_000;
+
+/** Ring speaks JSON:API; some deployments reject a bare `application/json` accept. */
+export const JSONAPI_ACCEPT = 'application/vnd.api+json, application/json';
+/** History paging cap - `links.next` alone is never trusted (shopsense notes). */
+export const DEFAULT_MAX_HISTORY_PAGES = 10;
+/** Full resolution keeps Ring's watermark small relative to the subject (friction log row 6). */
+export const DEFAULT_SNAPSHOT_RESOLUTION = { width: 1280, height: 720 } as const;
 
 export interface RingTokenSet {
   accessToken: string;
@@ -56,6 +63,52 @@ export interface RingIntegrationState {
   /** `awaiting | completed | removed`; `unknown` when the reply omits it. */
   status: string;
   raw: unknown;
+}
+
+/** One Event History row (`GET /v1/history/devices/{id}/events`). */
+export interface RingHistoryEvent {
+  eventId: string;
+  ringDeviceId: string;
+  eventType: string;
+  /** `motion.animal` and friends exist only here, never on webhooks (friction log row 2). */
+  subType: string | null;
+  /** Epoch ms, normalised from seconds, milliseconds or ISO-8601. `0` when unreadable. */
+  startMs: number;
+  endMs: number | null;
+  raw: unknown;
+}
+
+export interface ListHistoryOptions {
+  /** Stop paging once an event at or before this epoch-ms cursor is seen. */
+  sinceMs?: number;
+  /** Composite filter passed as `event_types`, e.g. `['motion.animal']`. */
+  eventTypes?: string[];
+  /** Hard page cap (default 10); `links.next` is followed but never trusted alone. */
+  maxPages?: number;
+}
+
+/** The image-snapshot reply: the JPEG/PNG plus Ring's audit headers. */
+export interface RingSnapshot {
+  bytes: Uint8Array;
+  contentType: 'image/jpeg' | 'image/png';
+  /** `X-Media-Timestamp`, tolerance-parsed; null when absent. */
+  capturedAt: Date | null;
+  /** `X-Media-Origin`: `recording` or `snapshot`, when present. */
+  origin: string | null;
+  /** `X-Request-ID` of the download that produced these bytes. */
+  requestId: string | null;
+}
+
+export interface ImageSnapshotOptions {
+  /** Bias the snapshot to this epoch-ms instant (`at_timestamp`). Default: now. */
+  atMs?: number;
+  /** Ask for the best frame in a window instead (`latest_in_range`, <= 24 h). */
+  range?: { startMs: number; endMs?: number };
+  format?: 'jpeg' | 'png';
+  /** Defaults to full 1280x720 (the watermark is fixed-size; lower res covers more subject). */
+  resolution?: { width: number; height: number };
+  /** Multi-camera devices: exactly one component per call, as a string. */
+  componentId?: string | null;
 }
 
 export interface RingClientOptions {
@@ -104,6 +157,28 @@ export function parseRetryAfter(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Normalise Ring's time encodings to epoch ms.
+ *
+ * Probes have shown Event History in epoch **ms** and the `X-Media-Timestamp`
+ * header in epoch **seconds**, and the docs pin down neither, so accept
+ * numbers (seconds or ms), numeric strings and ISO-8601. `null` when unreadable.
+ */
+export function toEpochMs(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value < 1e12 ? Math.round(value * 1000) : Math.round(value);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) return toEpochMs(numeric);
+    const parsed = Date.parse(trimmed);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
 }
 
 /** Extract JSON:API errors: `{"errors":[{"status","title","detail"}]}`. */
@@ -180,6 +255,40 @@ export function parseRingDevices(payload: unknown): RingDevice[] {
     });
   }
   return devices;
+}
+
+/**
+ * Normalise `GET /v1/history/devices/{id}/events` into `RingHistoryEvent[]`.
+ *
+ * Malformed rows are skipped, not thrown on: history is also the playground
+ * path (no webhooks can arrive there), and one bad row must not blank the page.
+ */
+export function parseHistoryEvents(payload: unknown): RingHistoryEvent[] {
+  if (!isRecord(payload) || !Array.isArray(payload.data)) return [];
+  const events: RingHistoryEvent[] = [];
+  for (const item of payload.data) {
+    if (!isRecord(item)) continue;
+    const eventId = typeof item.id === 'string' ? item.id : '';
+    const attributes = isRecord(item.attributes) ? item.attributes : {};
+    const eventType = typeof attributes.event_type === 'string' ? attributes.event_type : '';
+    if (!eventId || !eventType) continue;
+    const relationships = isRecord(item.relationships) ? item.relationships : {};
+    const source = isRecord(relationships.source) ? relationships.source : {};
+    const sourceData = isRecord(source.data) ? source.data : {};
+    events.push({
+      eventId,
+      ringDeviceId: typeof sourceData.id === 'string' ? sourceData.id : '',
+      eventType,
+      subType:
+        typeof attributes.sub_type === 'string' && attributes.sub_type !== ''
+          ? attributes.sub_type
+          : null,
+      startMs: toEpochMs(attributes.start) ?? 0,
+      endMs: toEpochMs(attributes.end),
+      raw: item,
+    });
+  }
+  return events;
 }
 
 /** Normalise an app-integrations reply into `{status, raw}`. */
@@ -275,6 +384,121 @@ export class RingClient {
   }
 
   /**
+   * Event History for one device (`GET /v1/history/devices/{id}/events`).
+   *
+   * This is the path that works without webhooks - the playground account
+   * cannot receive them - and the only place `motion.animal` exists (friction
+   * log row 2). `links.next` is followed directly (it carries the active
+   * filters and the page cursor); paging also stops on a `sinceMs` hit, an
+   * empty page or the `maxPages` cap, because the cursor is trusted by nobody.
+   */
+  async listHistoryEvents(
+    accessToken: string,
+    ringDeviceId: string,
+    options: ListHistoryOptions = {},
+  ): Promise<RingHistoryEvent[]> {
+    const maxPages = options.maxPages ?? DEFAULT_MAX_HISTORY_PAGES;
+    const query = new URLSearchParams();
+    if (options.eventTypes && options.eventTypes.length > 0) {
+      query.set('event_types', options.eventTypes.join(','));
+    }
+    const querySuffix = query.toString() === '' ? '' : `?${query.toString()}`;
+    let nextUrl: string | null =
+      `${this.apiBaseUrl}/v1/history/devices/${encodeURIComponent(ringDeviceId)}/events${querySuffix}`;
+    const collected: RingHistoryEvent[] = [];
+
+    for (let page = 0; nextUrl !== null && page < maxPages; page += 1) {
+      const body = await this.authorizedRequest(accessToken, 'GET', nextUrl);
+      const pageEvents = parseHistoryEvents(body);
+      let reachedCursor = false;
+      for (const event of pageEvents) {
+        if (options.sinceMs !== undefined && event.startMs > 0 && event.startMs <= options.sinceMs) {
+          reachedCursor = true;
+          continue;
+        }
+        collected.push(event);
+      }
+      const links = isRecord(body) && isRecord(body.links) ? body.links : {};
+      const nextHref = typeof links.next === 'string' && links.next !== '' ? links.next : null;
+      nextUrl =
+        reachedCursor || pageEvents.length === 0 || nextHref === null
+          ? null
+          : nextHref.startsWith('http')
+            ? nextHref
+            : `${this.apiBaseUrl}${nextHref}`;
+    }
+
+    return collected.sort((a, b) => a.startMs - b.startMs);
+  }
+
+  /**
+   * The image snapshot (FEATURES.md F4 primary path):
+   * `POST /v1/devices/{id}/media/image/download`.
+   *
+   * Ring answers **303** with a pre-signed URL; `fetch` follows it by default,
+   * so one call yields the bytes. `null` means "no frame right now" (403,
+   * 404, 416, 425 - an event whose clip is not ready must not raise, F4
+   * criterion 4); 401, 429 and 5xx still throw, because those are never the
+   * camera's fault.
+   */
+  async fetchImageSnapshot(
+    accessToken: string,
+    ringDeviceId: string,
+    options: ImageSnapshotOptions = {},
+  ): Promise<RingSnapshot | null> {
+    const imageOptions = {
+      format: options.format ?? 'jpeg',
+      resolution: options.resolution ?? DEFAULT_SNAPSHOT_RESOLUTION,
+    };
+    const body: Record<string, unknown> = options.range
+      ? {
+          type: 'latest_in_range',
+          start_timestamp: options.range.startMs,
+          ...(options.range.endMs === undefined ? {} : { end_timestamp: options.range.endMs }),
+          image_options: imageOptions,
+        }
+      : {
+          type: 'at_timestamp',
+          timestamp: options.atMs ?? Date.now(),
+          image_options: imageOptions,
+        };
+    if (options.componentId) {
+      body.components = [{ component_id: String(options.componentId) }];
+    }
+
+    const response = await this.withRetry(() =>
+      this.fetchImpl(
+        `${this.apiBaseUrl}/v1/devices/${encodeURIComponent(ringDeviceId)}/media/image/download`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            accept: JSONAPI_ACCEPT,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+      ),
+    );
+
+    if (response.status === 401 || response.status === 429 || response.status >= 500) {
+      await this.readJson(response); // Always throws; keeps auth and outages visible.
+    }
+    if (!response.ok) return null;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength === 0) return null;
+    const contentType = response.headers.get('content-type') ?? '';
+    const capturedAtMs = toEpochMs(response.headers.get('x-media-timestamp'));
+    return {
+      bytes,
+      contentType: contentType.includes('png') ? 'image/png' : 'image/jpeg',
+      capturedAt: capturedAtMs === null ? null : new Date(capturedAtMs),
+      origin: response.headers.get('x-media-origin'),
+      requestId: response.headers.get('x-request-id'),
+    };
+  }
+
+  /**
    * Step 1 of the two-step claim: `POST` the integration into `awaiting`.
    *
    * Sent as a flat JSON body (`account_identifier`, `nonce`) as the docs
@@ -354,6 +578,7 @@ export class RingClient {
         method,
         headers: {
           authorization: `Bearer ${accessToken}`,
+          accept: JSONAPI_ACCEPT,
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
