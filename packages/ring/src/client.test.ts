@@ -248,6 +248,99 @@ describe('users, devices and integrations', () => {
     expect(decodeURIComponent(calls[0]!.url)).toContain('status,capabilities,location,configurations');
   });
 
+  it('resolves includes through relationship pointers, as the live API returns them', async () => {
+    const { fetchImpl } = scriptedFetch([
+      () =>
+        jsonResponse(200, {
+          data: [
+            {
+              id: 'dev-real',
+              type: 'devices',
+              attributes: { name: 'Playground Device', image_url: 'https://x/img.png' },
+              relationships: {
+                status: { data: { type: 'device-status', id: 'dev-real.status.1' } },
+                capabilities: { data: { type: 'device-capabilities', id: 'dev-real.caps.1' } },
+                location: { data: { type: 'locations', id: 'dev-real.loc.1' } },
+                configurations: { data: { type: 'device-configurations', id: 'dev-real.conf.1' } },
+              },
+            },
+          ],
+          included: [
+            { id: 'dev-real.status.1', type: 'device-status', attributes: { online: true } },
+            {
+              id: 'dev-real.caps.1',
+              type: 'device-capabilities',
+              attributes: { motion_detection: true },
+            },
+            { id: 'dev-real.loc.1', type: 'locations', attributes: { country: 'US' } },
+            {
+              id: 'dev-real.conf.1',
+              type: 'device-configurations',
+              attributes: { e2e_encryption: { enabled: false } },
+            },
+          ],
+        }),
+    ]);
+    const devices = await makeClient(fetchImpl).listDevices('access-1');
+    // The pointer ids are resource ids, never the device id: matching by
+    // device id alone would have produced online=false against real Ring.
+    expect(devices[0]).toMatchObject({
+      ringDeviceId: 'dev-real',
+      online: true,
+      e2ee: false,
+      capabilities: { motion_detection: true },
+    });
+  });
+
+  it('falls back to defaults when relationship pointers have no included data', async () => {
+    const { fetchImpl } = scriptedFetch([
+      () =>
+        jsonResponse(200, {
+          data: [
+            {
+              id: 'dev-bare',
+              type: 'devices',
+              attributes: { name: 'Bare cam' },
+              relationships: {
+                status: { data: { type: 'device-status', id: 'dev-bare.status.1' } },
+              },
+            },
+          ],
+        }),
+    ]);
+    const devices = await makeClient(fetchImpl).listDevices('access-1');
+    expect(devices[0]).toMatchObject({
+      ringDeviceId: 'dev-bare',
+      online: false,
+      e2ee: false,
+      capabilities: null,
+    });
+  });
+
+  it('gets one device and its sub-resources the way the playground lists them', async () => {
+    const { fetchImpl, calls } = scriptedFetch([
+      () =>
+        jsonResponse(200, {
+          data: { id: 'dev-1', type: 'devices', attributes: { name: 'Coop cam' } },
+          included: [{ id: 'dev-1', type: 'status', attributes: { online: true } }],
+        }),
+      () =>
+        jsonResponse(200, {
+          data: { type: 'device-status', id: 'dev-1.status', attributes: { online: true, state: null } },
+        }),
+    ]);
+    const client = makeClient(fetchImpl);
+
+    const device = await client.getDevice('access-1', 'dev-1');
+    expect(device).toMatchObject({ ringDeviceId: 'dev-1', name: 'Coop cam', online: true });
+    expect(calls[0]!.url).toContain('/v1/devices/dev-1?include=');
+
+    const status = await client.getDeviceResource('access-1', 'dev-1', 'status');
+    expect(status.type).toBe('device-status');
+    expect(status.attributes.online).toBe(true);
+    expect(calls[1]!.url).toBe('https://api.ring.test/v1/devices/dev-1/status');
+  });
+
   it('posts, patches and deletes the app integration', async () => {
     const { fetchImpl, calls } = scriptedFetch([
       () => jsonResponse(201, { data: { type: 'app-integrations', attributes: { status: 'awaiting' } } }),

@@ -111,6 +111,19 @@ export interface ImageSnapshotOptions {
   componentId?: string | null;
 }
 
+/** One sub-resource reply from `GET /v1/devices/{id}/{resource}`. */
+export interface RingDeviceResource {
+  /** Ring's own type name: `device-status`, `device-capabilities`, `locations`, `device-configurations`. */
+  type: string;
+  id: string | null;
+  attributes: Record<string, unknown>;
+  raw: unknown;
+}
+
+/** The four device sub-resources the playground exposes as their own endpoints. */
+export const DEVICE_RESOURCES = ['status', 'capabilities', 'location', 'configurations'] as const;
+export type RingDeviceResourceName = (typeof DEVICE_RESOURCES)[number];
+
 export interface RingClientOptions {
   clientId: string;
   clientSecret: string;
@@ -207,26 +220,70 @@ function readE2ee(attributes: Record<string, unknown>, configurations: Record<st
 }
 
 /**
+ * Type names real Ring uses in `included` for each relationship. The docs and
+ * the simulator use the bare names; the live API uses `device-*` plus the
+ * plural `locations` and links items only through relationship pointers
+ * (friction log row 25).
+ */
+const INCLUDE_TYPE_ALIASES: Record<string, string[]> = {
+  status: ['device-status', 'status'],
+  capabilities: ['device-capabilities', 'capabilities'],
+  configurations: ['device-configurations', 'configurations'],
+  location: ['locations', 'location'],
+};
+
+/**
  * Normalise `GET /v1/devices` into `RingDevice[]`.
  *
- * The include payload nests status/capabilities/configurations either as
- * `included` resources or flattened into `attributes` depending on the Ring
- * deployment; both are accepted, and `raw` keeps whatever arrived so a
- * surprise is debuggable rather than lost (friction log).
+ * Includes are resolved relation-first: real Ring links `included` items only
+ * through `relationships.<name>.data {type,id}` - the ids are NOT the device
+ * id - under type names like `device-status` and `locations`. The simulator
+ * ships bare names keyed by device id, and some payloads flatten attributes;
+ * all three shapes are accepted, and `raw` keeps whatever arrived so a
+ * surprise is debuggable rather than lost (friction log rows 14, 25).
  *
- * Included resources are matched on **id and type**: matching on type alone
- * hands every camera the *first* camera's configurations, and with them the
- * wrong E2EE flag - which decides whether media is ever fetched (F3).
+ * Matching on type alone hands every camera the *first* camera's
+ * configurations, and with them the wrong E2EE flag - which decides whether
+ * media is ever fetched (F3).
  */
 export function parseRingDevices(payload: unknown): RingDevice[] {
   if (!isRecord(payload) || !Array.isArray(payload.data)) return [];
   const included = Array.isArray(payload.included) ? payload.included.filter(isRecord) : [];
-  const attributesFor = (
-    id: string,
-    type: string,
+
+  const findIncluded = (
+    type: string | null,
+    id: string | null,
   ): Record<string, unknown> | undefined => {
-    const item = included.find((candidate) => candidate.id === id && candidate.type === type);
+    if (!id) return undefined;
+    const item = included.find(
+      (candidate) => candidate.id === id && (type === null || candidate.type === type),
+    );
     return item && isRecord(item.attributes) ? item.attributes : undefined;
+  };
+
+  const resolveRelationship = (
+    item: Record<string, unknown>,
+    name: string,
+  ): Record<string, unknown> | undefined => {
+    // 1) Follow the relationship pointer (real Ring): data {type, id}.
+    const relationships = isRecord(item.relationships) ? item.relationships : {};
+    const relation = isRecord(relationships[name]) ? relationships[name] : undefined;
+    if (relation) {
+      const pointer = isRecord(relation.data) ? relation.data : undefined;
+      if (pointer) {
+        const found = findIncluded(
+          typeof pointer.type === 'string' ? pointer.type : null,
+          typeof pointer.id === 'string' ? pointer.id : null,
+        );
+        if (found) return found;
+      }
+    }
+    // 2) Fall back to bare type aliases keyed by device id (simulator).
+    for (const alias of INCLUDE_TYPE_ALIASES[name] ?? [name]) {
+      const found = findIncluded(alias, typeof item.id === 'string' ? item.id : null);
+      if (found) return found;
+    }
+    return undefined;
   };
 
   const devices: RingDevice[] = [];
@@ -235,12 +292,12 @@ export function parseRingDevices(payload: unknown): RingDevice[] {
     const ringDeviceId = typeof item.id === 'string' ? item.id : '';
     if (!ringDeviceId) continue;
     const attributes = isRecord(item.attributes) ? item.attributes : {};
-    const status = attributesFor(ringDeviceId, 'status') ?? {};
+    const status = resolveRelationship(item, 'status') ?? {};
     const capabilities =
-      attributesFor(ringDeviceId, 'capabilities') ??
+      resolveRelationship(item, 'capabilities') ??
       (isRecord(attributes.capabilities) ? attributes.capabilities : null);
     const configurations =
-      attributesFor(ringDeviceId, 'configurations') ??
+      resolveRelationship(item, 'configurations') ??
       (isRecord(attributes.configurations) ? attributes.configurations : {});
 
     devices.push({
@@ -381,6 +438,49 @@ export class RingClient {
     const url = `${this.apiBaseUrl}/v1/devices?include=${encodeURIComponent(include)}`;
     const body = await this.authorizedRequest(accessToken, 'GET', url);
     return parseRingDevices(body);
+  }
+
+  /**
+   * `GET /v1/devices/{id}` - one camera ("Device Discovery" in the playground).
+   * `include=` is accepted here too (verified live), so the default stays
+   * `DEVICE_INCLUDE` and the reply parses through the same normaliser.
+   */
+  async getDevice(
+    accessToken: string,
+    ringDeviceId: string,
+    options: { include?: string } = {},
+  ): Promise<RingDevice | null> {
+    const include = options.include ?? DEVICE_INCLUDE;
+    const url = `${this.apiBaseUrl}/v1/devices/${encodeURIComponent(ringDeviceId)}?include=${encodeURIComponent(include)}`;
+    const body = await this.authorizedRequest(accessToken, 'GET', url);
+    const data = isRecord(body) && isRecord(body.data) ? body.data : null;
+    if (!data) return null;
+    return parseRingDevices({ data: [data], included: isRecord(body) ? body.included : undefined })[0] ?? null;
+  }
+
+  /**
+   * One device sub-resource (`GET /v1/devices/{id}/{resource}`): the Status,
+   * Capabilities, Locations and Configurations entries the playground exposes.
+   * Attributes come back as-is - their shapes differ per deployment and only
+   * the fields a caller needs are read (e.g. `online`, `reported_at`).
+   */
+  async getDeviceResource(
+    accessToken: string,
+    ringDeviceId: string,
+    resource: RingDeviceResourceName,
+  ): Promise<RingDeviceResource> {
+    const body = await this.authorizedRequest(
+      accessToken,
+      'GET',
+      `${this.apiBaseUrl}/v1/devices/${encodeURIComponent(ringDeviceId)}/${resource}`,
+    );
+    const data = isRecord(body) && isRecord(body.data) ? body.data : {};
+    return {
+      type: typeof data.type === 'string' ? data.type : resource,
+      id: typeof data.id === 'string' ? data.id : null,
+      attributes: isRecord(data.attributes) ? data.attributes : {},
+      raw: body,
+    };
   }
 
   /**

@@ -25,6 +25,25 @@ describe.skipIf(liveToken === '')('live Ring API smoke (needs RING_LIVE_TOKEN)',
     const devices = await client.listDevices(liveToken);
     expect(devices.length).toBeGreaterThan(0);
     const device = devices[0]!;
+    // Real Ring links includes through relationship pointers; if this is false
+    // the parser fell back to defaults (friction log row 25).
+    expect(typeof device.online).toBe('boolean');
+
+    // Every playground endpoint, exercised the way its curl shows it.
+    const details = await client.getDevice(liveToken, device.ringDeviceId);
+    expect(details?.ringDeviceId).toBe(device.ringDeviceId);
+    const status = await client.getDeviceResource(liveToken, device.ringDeviceId, 'status');
+    expect(status.type).toBe('device-status');
+    const capabilities = await client.getDeviceResource(liveToken, device.ringDeviceId, 'capabilities');
+    expect(capabilities.type).toBe('device-capabilities');
+    const location = await client.getDeviceResource(liveToken, device.ringDeviceId, 'location');
+    expect(location.type).toBe('locations');
+    const configurations = await client.getDeviceResource(
+      liveToken,
+      device.ringDeviceId,
+      'configurations',
+    );
+    expect(configurations.type).toBe('device-configurations');
 
     const events = await client.listHistoryEvents(liveToken, device.ringDeviceId, { maxPages: 1 });
     const newest = events.length > 0 ? events[events.length - 1] : undefined;
@@ -40,7 +59,7 @@ describe.skipIf(liveToken === '')('live Ring API smoke (needs RING_LIVE_TOKEN)',
     }
     // Shape-only summary so a manual run is readable at a glance (no secrets).
     console.log(
-      `live smoke: devices=${devices.length} events=${events.length}` +
+      `live smoke: devices=${devices.length} online=${device.online} events=${events.length} status.online=${String(status.attributes.online)}` +
         (snapshot
           ? ` snapshot=${snapshot.bytes.byteLength}B ${snapshot.contentType} origin=${snapshot.origin ?? '-'}`
           : ' snapshot=none'),
