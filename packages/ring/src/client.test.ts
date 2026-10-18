@@ -181,34 +181,52 @@ describe('users, devices and integrations', () => {
     expect((call.init.headers as Record<string, string>).authorization).toBe('Bearer access-1');
   });
 
-  it('lists devices, merging included status/configurations includes', async () => {
+  it('lists devices, merging includes per device id (not per type)', async () => {
     const { fetchImpl, calls } = scriptedFetch([
       () =>
         jsonResponse(200, {
           data: [
             { id: 'dev-1', type: 'devices', attributes: { name: 'Coop cam', device_type: 'camera' } },
-            { id: 'dev-2', type: 'devices', attributes: { name: 'Shed cam', online: 'online', e2ee: true } },
+            { id: 'dev-2', type: 'devices', attributes: { name: 'Shed cam' } },
+            { id: 'dev-3', type: 'devices', attributes: { name: 'Barn cam', e2ee: true } },
           ],
           included: [
             { id: 'dev-1', type: 'status', attributes: { online: true } },
             {
               id: 'dev-1',
               type: 'configurations',
+              attributes: { e2e_encryption: { enabled: false } },
+            },
+            { id: 'dev-2', type: 'status', attributes: { online: false } },
+            {
+              id: 'dev-2',
+              type: 'configurations',
               attributes: { e2e_encryption: { enabled: true } },
             },
+            { id: 'dev-2', type: 'capabilities', attributes: { video_codecs: ['H264'] } },
           ],
         }),
     ]);
     const devices = await makeClient(fetchImpl).listDevices('access-1');
 
-    expect(devices).toHaveLength(2);
+    expect(devices).toHaveLength(3);
     expect(devices[0]).toMatchObject({
       ringDeviceId: 'dev-1',
       name: 'Coop cam',
       online: true,
-      e2ee: true,
+      e2ee: false,
+      capabilities: null,
     });
-    expect(devices[1]).toMatchObject({ ringDeviceId: 'dev-2', online: true, e2ee: true });
+    // dev-2's data must come from dev-2's includes, never from dev-1's - the
+    // E2EE flag decides whether media is fetched at all (F3 criterion 2).
+    expect(devices[1]).toMatchObject({
+      ringDeviceId: 'dev-2',
+      online: false,
+      e2ee: true,
+      capabilities: { video_codecs: ['H264'] },
+    });
+    // dev-3 has no includes: flattened attributes and the false default apply.
+    expect(devices[2]).toMatchObject({ ringDeviceId: 'dev-3', online: false, e2ee: true });
     expect(calls[0]!.url).toContain('/v1/devices?include=');
     expect(decodeURIComponent(calls[0]!.url)).toContain('status,capabilities,location,configurations');
   });

@@ -138,12 +138,19 @@ function readE2ee(attributes: Record<string, unknown>, configurations: Record<st
  * `included` resources or flattened into `attributes` depending on the Ring
  * deployment; both are accepted, and `raw` keeps whatever arrived so a
  * surprise is debuggable rather than lost (friction log).
+ *
+ * Included resources are matched on **id and type**: matching on type alone
+ * hands every camera the *first* camera's configurations, and with them the
+ * wrong E2EE flag - which decides whether media is ever fetched (F3).
  */
 export function parseRingDevices(payload: unknown): RingDevice[] {
   if (!isRecord(payload) || !Array.isArray(payload.data)) return [];
   const included = Array.isArray(payload.included) ? payload.included.filter(isRecord) : [];
-  const attributesFor = (type: string): Record<string, unknown> | undefined => {
-    const item = included.find((candidate) => candidate.type === type);
+  const attributesFor = (
+    id: string,
+    type: string,
+  ): Record<string, unknown> | undefined => {
+    const item = included.find((candidate) => candidate.id === id && candidate.type === type);
     return item && isRecord(item.attributes) ? item.attributes : undefined;
   };
 
@@ -153,11 +160,12 @@ export function parseRingDevices(payload: unknown): RingDevice[] {
     const ringDeviceId = typeof item.id === 'string' ? item.id : '';
     if (!ringDeviceId) continue;
     const attributes = isRecord(item.attributes) ? item.attributes : {};
-    const status = attributesFor('status') ?? {};
+    const status = attributesFor(ringDeviceId, 'status') ?? {};
     const capabilities =
-      attributesFor('capabilities') ?? (isRecord(attributes.capabilities) ? attributes.capabilities : null);
+      attributesFor(ringDeviceId, 'capabilities') ??
+      (isRecord(attributes.capabilities) ? attributes.capabilities : null);
     const configurations =
-      attributesFor('configurations') ??
+      attributesFor(ringDeviceId, 'configurations') ??
       (isRecord(attributes.configurations) ? attributes.configurations : {});
 
     devices.push({
