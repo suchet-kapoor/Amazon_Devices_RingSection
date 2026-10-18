@@ -6,5 +6,6 @@
  * server used in tests and demos.
  */
 export * from './signature.js';
+export * from './token-vault.js';
 export * from './types.js';
 export * from './webhook.js';
