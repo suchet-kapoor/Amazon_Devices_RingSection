@@ -23,18 +23,40 @@ ladder (push → SMS → call) and a weekly summary of patterns and likely weak 
 | [`docs/ring-api-notes.md`](docs/ring-api-notes.md) | One-page distillation of the Ring Partner API (verified 2026-10-18) |
 | [`docs/FRICTION_LOG.md`](docs/FRICTION_LOG.md) | Every surprise, written in the moment |
 
-## Quick start
+## Quick start (zero-config simulator)
+
+No Ring account or credentials needed: `npm run dev` runs the app against a bundled fake Ring
+API and an embedded Postgres (PGlite, stored in `.pglite/`).
 
 ```bash
-python app.py
-curl http://localhost:8080/health
+npm install
+npm run dev
 ```
 
+Open <http://localhost:3000> and:
+
+1. **Link the fake Ring account** — plays Ring's side of the account-linking flow and lands on
+   the sign-in page.
+2. **Sign in** (name + email) to complete the link. The nonce is matched server-side against
+   the stored token — nothing is ever auto-verified.
+3. On **Cameras & zones**: *Sync devices from Ring*, then map each camera to coop / pasture /
+   shed / gate.
+4. Back on the dashboard: **Send a signed test webhook** — the event appears in the feed and in
+   `GET /api/events`. That last pair is the M1 gate (`docs/FEATURES.md` §4).
+
+### Real Ring or Postgres
+
+Copy `.env.example` to `.env` and fill in the credentials (`RING_SIM=1` forces the simulator
+even when credentials are present). For Postgres instead of PGlite:
+
 ```bash
-docker build -t predator-guard .
-docker run -p 8080:8080 predator-guard
-curl http://localhost:8080/health
+docker compose up -d db
+# then run with:
+#   DATABASE_URL=postgres://predator_guard:predator_guard@localhost:5432/predator_guard npm run dev
 ```
+
+The Python service in `app.py` is still the placeholder that proves the CI/CD pipeline end to
+end; the product itself lives in `apps/web` and `packages/*`.
 
 ## Contributing
 
