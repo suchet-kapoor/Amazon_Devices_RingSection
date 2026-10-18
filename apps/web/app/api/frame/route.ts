@@ -6,16 +6,6 @@ import { fetchLatestFrame } from '@/lib/frame';
 import { ensureFarm } from '@/lib/farms';
 import { createRingClient, describeRingError, ensureFreshAccessToken } from '@/lib/ring';
 
-/**
- * `GET /api/frame?deviceId=...` - the latest frame the camera can give us.
- *
- * Ring only accepts server-to-server calls (browser traffic is blocked across
- * the board), so this proxies the F4 image snapshot: "now" first, and when the
- * camera has no frame there, the newest recorded event's frame (a playground
- * camera only ever has the latter). The live page refreshes it every few
- * seconds; nothing is stored here - captures go through `POST /api/captures`.
- */
-
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request): Promise<Response> {

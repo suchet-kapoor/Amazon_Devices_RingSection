@@ -9,13 +9,6 @@ import { ensureFarm } from '@/lib/farms';
 
 import { LiveView } from './live-view';
 
-/**
- * Live watch (the "see" milestone): a near-live frame per camera, one-click
- * capture, an event scan that snapshots the newest uncaptured event, and the
- * local capture gallery. True WebRTC live video (WHEP) is the next step -
- * `docs/ring-api-notes.md` documents the session workflow.
- */
-
 export const dynamic = 'force-dynamic';
 
 export default async function LivePage() {

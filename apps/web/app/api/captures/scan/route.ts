@@ -1,21 +1,19 @@
 import { NextResponse } from 'next/server';
+import { eq } from 'drizzle-orm';
 
-import { findCaptureDevice, listCaptures, saveCapture } from '@/lib/captures';
+import { events as eventRows } from '@predator-guard/db';
+
+import {
+  findCaptureDevice,
+  listCapturedEventIds,
+  markCapturePending,
+  saveCapture,
+} from '@/lib/captures';
 import { loadConfig } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { EVENT_FRAME_OFFSET_MS } from '@/lib/frame';
 import { ensureFarm } from '@/lib/farms';
 import { createRingClient, describeRingError, ensureFreshAccessToken } from '@/lib/ring';
-
-/**
- * `POST /api/captures/scan` - the "something crossed the frame" step.
- *
- * Pulls the newest Event History page, takes the newest event we have not
- * captured yet, snapshots the camera *at that event's own timestamp* and
- * stores it with the event id as the dedupe key (`source: event:<id>`).
- * The playground only emits `on_demand` events; real accounts add motion,
- * and Smart Alerts add `sub_type` values like `motion.animal`.
- */
 
 export const dynamic = 'force-dynamic';
 
@@ -55,19 +53,30 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 404 },
     );
   }
+  if (device.e2ee) {
+    return NextResponse.json(
+      {
+        error: 'e2ee_device',
+        detail: 'This camera uses end-to-end encryption and cannot be captured.',
+      },
+      { status: 409 },
+    );
+  }
 
   try {
     const { accessToken } = await ensureFreshAccessToken(db, config, farm.id);
     const client = createRingClient(config);
-    const known = new Set(
-      (await listCaptures(config.capturesDir, 500)).map((record) => record.source),
-    );
-    const events = await client.listHistoryEvents(accessToken, ringDeviceId, { maxPages: 1 });
-    const fresh = events.filter(
-      (event) => event.startMs > 0 && !known.has(`event:${event.eventId}`),
+    const known = await listCapturedEventIds(db, farm.id);
+    const historyEvents = await client.listHistoryEvents(accessToken, ringDeviceId, { maxPages: 1 });
+    const fresh = historyEvents.filter(
+      (event) => event.startMs > 0 && !known.has(event.eventId),
     );
     if (fresh.length === 0) {
-      return NextResponse.json({ status: 'no_new_events', scanned: events.length, capture: null });
+      return NextResponse.json({
+        status: 'no_new_events',
+        scanned: historyEvents.length,
+        capture: null,
+      });
     }
 
     const newest = fresh[fresh.length - 1]!;
@@ -75,19 +84,29 @@ export async function POST(request: Request): Promise<NextResponse> {
       atMs: newest.startMs + EVENT_FRAME_OFFSET_MS,
     });
     if (!snapshot) {
-      return NextResponse.json({ status: 'no_frame', scanned: events.length, capture: null });
+      return NextResponse.json({ status: 'no_frame', scanned: historyEvents.length, capture: null });
     }
 
-    const capture = await saveCapture(config.capturesDir, {
+    const matchedEvent = await db
+      .select({ id: eventRows.id })
+      .from(eventRows)
+      .where(eq(eventRows.ringEventId, newest.eventId))
+      .limit(1);
+    const eventId = matchedEvent[0]?.id ?? null;
+    const capture = await saveCapture(db, {
       bytes: snapshot.bytes,
       contentType: snapshot.contentType,
       capturedAt: new Date(newest.startMs),
       device,
+      farmId: farm.id,
+      eventId,
+      ringEventId: newest.eventId,
       source: `event:${newest.eventId}`,
     });
+    if (eventId) await markCapturePending(db, eventId, capture.id);
     return NextResponse.json({
       status: 'captured',
-      scanned: events.length,
+      scanned: historyEvents.length,
       event: {
         id: newest.eventId,
         type: newest.eventType,

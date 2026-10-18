@@ -1,5 +1,4 @@
 import { DEFAULT_API_BASE_URL, DEFAULT_OAUTH_BASE_URL } from '@predator-guard/ring';
-import path from 'node:path';
 
 /**
  * Environment loading (FEATURES.md cross-cutting: "All credentials and model
@@ -58,8 +57,6 @@ export interface RingConfig {
    * vault row and no refresh - re-paste a fresh token when it expires.
    */
   ringAccessToken: string | undefined;
-  /** Where captured frames + metadata live until the deployment database lands. */
-  capturesDir: string;
 }
 
 function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -110,9 +107,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RingConfig {
     oauthBaseUrl:
       get('RING_OAUTH_BASE_URL') ?? (isSim ? SIM_DEFAULTS.oauthBaseUrl : DEFAULT_OAUTH_BASE_URL),
     ringAccessToken,
-    // Capture storage sits next to the app (apps/web/.captures) and is
-    // gitignored; CAPTURES_DIR just moves it (tests, deployments).
-    capturesDir: get('CAPTURES_DIR') ?? path.join(process.cwd(), '.captures'),
   };
 
   if (missing.length > 0) {

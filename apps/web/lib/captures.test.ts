@@ -1,53 +1,96 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { alerts, createDb, detections, events, farms, type Db } from '@predator-guard/db';
 
-import { listCaptures, readCaptureImage, saveCapture } from './captures';
-
-/**
- * Capture storage (the "see" milestone): bytes land on disk, metadata lands in
- * `index.jsonl`, and only files inside `images/` are ever servable.
- */
+import { listCapturedEventIds, listCaptures, readCaptureImage, saveCapture } from './captures';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+const DEVICE = {
+  ringDeviceId: 'ava1.ring.device.A',
+  name: 'Coop cam',
+  zoneKind: 'coop',
+  e2ee: false,
+};
 
-const DEVICE = { ringDeviceId: 'ava1.ring.device.A', name: 'Coop cam', zoneKind: 'coop' };
+describe('database capture storage', () => {
+  let db: Db;
+  let closeDb: () => Promise<void>;
 
-describe('capture storage', () => {
-  let dir = '';
-
-  beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), 'pg-captures-'));
+  beforeAll(async () => {
+    const opened = await createDb({ pgliteDataDir: 'memory://' });
+    db = opened.db;
+    closeDb = opened.close;
   });
 
-  afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
+  afterAll(async () => {
+    await closeDb();
   });
 
-  it('stores the frame and a metadata record, newest first', async () => {
-    const first = await saveCapture(dir, {
+  async function createFarm(): Promise<string> {
+    const rows = await db
+      .insert(farms)
+      .values({ name: 'Capture Farm', ownerEmail: `${randomUUID()}@example.test` })
+      .returning({ id: farms.id });
+    return rows[0]!.id;
+  }
+
+  it('stores image bytes and metadata in Postgres, newest first', async () => {
+    const farmId = await createFarm();
+    const [event] = await db
+      .insert(events)
+      .values({
+        farmId,
+        ringDeviceId: DEVICE.ringDeviceId,
+        ringEventId: 'event-1',
+        ringRequestId: 'request-1',
+        eventType: 'motion_detected',
+        eventClass: 'motion.animal',
+        occurredAt: new Date('2026-10-19T03:00:00.000Z'),
+        rawJson: {},
+      })
+      .returning({ id: events.id });
+    const first = await saveCapture(db, {
       bytes: JPEG,
       contentType: 'image/jpeg',
       capturedAt: new Date('2026-10-19T02:00:00.000Z'),
       device: DEVICE,
+      farmId,
       source: 'manual',
     });
-    const second = await saveCapture(dir, {
+    const second = await saveCapture(db, {
       bytes: JPEG,
       contentType: 'image/jpeg',
       capturedAt: new Date('2026-10-19T03:00:00.000Z'),
       device: DEVICE,
-      source: 'event:evt-1',
+      farmId,
+      eventId: event!.id,
+      ringEventId: 'event-1',
+      source: 'event:event-1',
+    });
+    const [detection] = await db
+      .insert(detections)
+      .values({ eventId: event!.id, species: 'fox', confidence: 0.94, status: 'done' })
+      .returning({ id: detections.id });
+    await db.insert(alerts).values({
+      detectionId: detection!.id,
+      severity: 'high',
+      channel: 'console',
     });
 
-    const onDisk = await readFile(path.join(dir, first.file));
-    expect([...onDisk]).toEqual([...JPEG]);
+    const image = await readCaptureImage(db, first.id);
+    expect([...image!.bytes]).toEqual([...JPEG]);
 
-    const captures = await listCaptures(dir);
-    expect(captures.map((record) => record.id)).toEqual([second.id, first.id]);
-    expect(captures[1]).toMatchObject({
+    const listed = await listCaptures(db, farmId);
+    expect(listed.map((record) => record.id)).toEqual([second.id, first.id]);
+    expect(await listCapturedEventIds(db, farmId)).toEqual(new Set(['event-1']));
+    expect(listed[0]).toMatchObject({
+      species: 'fox',
+      confidence: 0.94,
+      detectionStatus: 'done',
+      severity: 'high',
+    });
+    expect(listed[1]).toMatchObject({
       deviceName: 'Coop cam',
       zoneKind: 'coop',
       capturedAt: '2026-10-19T02:00:00.000Z',
@@ -56,26 +99,28 @@ describe('capture storage', () => {
     });
   });
 
-  it('is empty before anything is captured', async () => {
-    await expect(listCaptures(dir)).resolves.toEqual([]);
+  it('returns no captures and no image for unknown records', async () => {
+    const farmId = await createFarm();
+    await expect(listCaptures(db, farmId)).resolves.toEqual([]);
+    await expect(readCaptureImage(db, randomUUID())).resolves.toBeNull();
   });
 
-  it('serves only files inside images/ and refuses traversal', async () => {
-    const record = await saveCapture(dir, {
+  it('deduplicates event captures by Ring event id', async () => {
+    const farmId = await createFarm();
+    const input = {
       bytes: JPEG,
-      contentType: 'image/jpeg',
+      contentType: 'image/jpeg' as const,
       capturedAt: new Date('2026-10-19T02:00:00.000Z'),
       device: DEVICE,
-      source: 'manual',
-    });
+      farmId,
+      ringEventId: 'dedup-event',
+      source: 'event:dedup-event',
+    };
 
-    const image = await readCaptureImage(dir, record.file);
-    expect(image?.contentType).toBe('image/jpeg');
-    expect([...(image?.bytes ?? [])]).toEqual([...JPEG]);
+    const first = await saveCapture(db, input);
+    const duplicate = await saveCapture(db, input);
 
-    await expect(readCaptureImage(dir, '../index.jsonl')).resolves.toBeNull();
-    await expect(readCaptureImage(dir, 'index.jsonl')).resolves.toBeNull();
-    await expect(readCaptureImage(dir, 'images/../index.jsonl')).resolves.toBeNull();
-    await expect(readCaptureImage(dir, 'images/missing.jpg')).resolves.toBeNull();
+    expect(duplicate.id).toBe(first.id);
+    expect(await listCaptures(db, farmId)).toHaveLength(1);
   });
 });

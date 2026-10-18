@@ -6,8 +6,9 @@ Predator Guard turns a farmer's existing Ring outdoor cameras into a **species-a
 predator alarm**. It tells a fox from a raccoon from the farm's own dog, alerts only on
 real threats, and shows *which zone* was hit *and when*.
 
-> **Status:** planning complete, build starting. The service in `app.py` is still the
-> placeholder used to prove the CI/CD pipeline end to end.
+> **Status:** Ring linking, device sync, event intake, and database-backed event captures are
+> implemented. Animal identification, danger scoring, and alerts remain future work. The
+> service in `app.py` is still the placeholder used to prove the CI/CD pipeline end to end.
 
 ## Why it is different
 
@@ -43,6 +44,10 @@ Open <http://localhost:3000> and:
    shed / gate.
 4. Back on the dashboard: **Send a signed test webhook** — the event appears in the feed and in
    `GET /api/events`. That last pair is the M1 gate (`docs/FEATURES.md` §4).
+5. Open **Live watch**: eligible motion events attempt an event-time screenshot. When Ring
+   returns a frame, its bytes and camera/zone/timestamp metadata are saved in the configured
+   database. The gallery shows identification as pending; it does not yet name animals or
+   calculate danger levels.
 
 ### Real Ring or Postgres
 
@@ -74,6 +79,10 @@ docker compose up -d db
 # then run with:
 #   DATABASE_URL=postgres://predator_guard:predator_guard@localhost:5432/predator_guard npm run dev
 ```
+
+Captures and their metadata are stored in this same database. PostgreSQL is the supported
+server database; SQL Server is not wired up because the current schema, migrations, and drivers
+are PostgreSQL-specific. The no-configuration PGlite database is also PostgreSQL-compatible.
 
 The Python service in `app.py` is still the placeholder that proves the CI/CD pipeline end to
 end; the product itself lives in `apps/web` and `packages/*`.

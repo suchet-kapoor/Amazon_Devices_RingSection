@@ -9,20 +9,19 @@ import { fetchLatestFrame } from '@/lib/frame';
 import { ensureFarm } from '@/lib/farms';
 import { createRingClient, describeRingError, ensureFreshAccessToken } from '@/lib/ring';
 
-/**
- * Captures (the "see" milestone): the screenshot + timestamp + camera details
- * the product goal asks for, stored locally through `lib/captures` until the
- * deployment database arrives.
- *
- * `GET`  - newest-first list for the live page.
- * `POST` - snapshot one camera now (or at `atMs`) and store it.
- */
-
 export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<NextResponse> {
+  const db = await getDb();
   const config = loadConfig();
-  return NextResponse.json({ captures: await listCaptures(config.capturesDir) });
+  const farm = await ensureFarm(db, config);
+  if (!farm) {
+    return NextResponse.json(
+      { error: 'no_farm', detail: 'No farm is linked yet. Link a Ring account first.' },
+      { status: 409 },
+    );
+  }
+  return NextResponse.json({ captures: await listCaptures(db, farm.id) });
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -61,6 +60,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 404 },
     );
   }
+  if (device.e2ee) {
+    return NextResponse.json(
+      {
+        error: 'e2ee_device',
+        detail: 'This camera uses end-to-end encryption and cannot be captured.',
+      },
+      { status: 409 },
+    );
+  }
 
   const requestedAtMs =
     typeof body.atMs === 'number' && Number.isFinite(body.atMs) ? body.atMs : null;
@@ -69,8 +77,6 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const { accessToken } = await ensureFreshAccessToken(db, config, farm.id);
     const client = createRingClient(config);
-    // With no explicit instant: "now", falling back to the newest recorded
-    // event for cameras that have no live frame (see lib/frame.ts).
     let snapshot: RingSnapshot | null;
     let capturedAtMs: number;
     if (requestedAtMs === null) {
@@ -89,13 +95,12 @@ export async function POST(request: Request): Promise<NextResponse> {
         { status: 404 },
       );
     }
-    const capture = await saveCapture(config.capturesDir, {
+    const capture = await saveCapture(db, {
       bytes: snapshot.bytes,
       contentType: snapshot.contentType,
-      // The instant this capture stands for: "now" (or the newest event) for
-      // manual captures, the event's own start for event-driven ones.
       capturedAt: new Date(capturedAtMs),
       device,
+      farmId: farm.id,
       source,
     });
     return NextResponse.json({ capture }, { status: 201 });

@@ -1,39 +1,30 @@
-import { and, eq } from 'drizzle-orm';
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 
-import { devices, zones, type Db } from '@predator-guard/db';
-
-/**
- * Capture storage (the "see" milestone).
- *
- * The product goal: live view -> something crosses the frame -> keep the
- * screenshot, its timestamp and the camera details. Until the deployment
- * database arrives (the operator's Postgres/MSSQL credentials), captures live
- * on disk as a JPEG/PNG plus one JSON line in `index.jsonl` - swappable for
- * rows later because every writer goes through `saveCapture`.
- */
+import { alerts, captures, detections, devices, zones, type Db } from '@predator-guard/db';
 
 export interface CaptureDevice {
   ringDeviceId: string;
   name: string;
   zoneKind: string | null;
+  e2ee: boolean;
 }
 
 export interface CaptureRecord {
   id: string;
-  /** When the frame was asked for: event time for event captures, "now" for manual ones. */
+  eventId: string | null;
+  ringEventId: string | null;
   capturedAt: string;
   savedAt: string;
   ringDeviceId: string;
   deviceName: string;
   zoneKind: string | null;
-  /** `manual` or `event:<history-event-id>` - also the event dedupe key. */
   source: string;
   contentType: string;
   bytes: number;
-  /** Path relative to the captures directory, e.g. `images/2026-…-abc123.jpg`. */
-  file: string;
+  species: string | null;
+  confidence: number | null;
+  detectionStatus: string | null;
+  severity: string | null;
 }
 
 export interface SaveCaptureInput {
@@ -41,20 +32,47 @@ export interface SaveCaptureInput {
   contentType: 'image/jpeg' | 'image/png';
   capturedAt: Date;
   device: CaptureDevice;
+  farmId: string;
+  eventId?: string | null;
+  ringEventId?: string | null;
   source: string;
 }
 
-const IMAGE_DIR = 'images';
-const INDEX_FILE = 'index.jsonl';
+const recordColumns = {
+  id: captures.id,
+  eventId: captures.eventId,
+  ringEventId: captures.ringEventId,
+  capturedAt: captures.capturedAt,
+  savedAt: captures.savedAt,
+  ringDeviceId: captures.ringDeviceId,
+  deviceName: captures.deviceName,
+  zoneKind: captures.zoneKind,
+  source: captures.source,
+  contentType: captures.contentType,
+} as const;
 
-/** A filesystem-safe, sortable id; collisions are broken by the random tail. */
-function captureId(capturedAt: Date): string {
-  const stamp = capturedAt.toISOString().replace(/[:.]/g, '-');
-  const tail = Math.random().toString(36).slice(2, 8);
-  return `${stamp}-${tail}`;
+function toCaptureRecord(
+  row: typeof captures.$inferSelect,
+): CaptureRecord {
+  return {
+    id: row.id,
+    eventId: row.eventId,
+    ringEventId: row.ringEventId,
+    capturedAt: row.capturedAt.toISOString(),
+    savedAt: row.savedAt.toISOString(),
+    ringDeviceId: row.ringDeviceId,
+    deviceName: row.deviceName,
+    zoneKind: row.zoneKind,
+    source: row.source,
+    contentType: row.contentType,
+    bytes: row.imageBytes.byteLength,
+    species: null,
+    confidence: null,
+    detectionStatus: null,
+    severity: null,
+  };
 }
 
-/** Look a camera up with its zone, so a capture can carry the camera details. */
 export async function findCaptureDevice(
   db: Db,
   farmId: string,
@@ -65,6 +83,7 @@ export async function findCaptureDevice(
       ringDeviceId: devices.ringDeviceId,
       name: devices.name,
       zoneKind: zones.kind,
+      e2ee: devices.e2ee,
     })
     .from(devices)
     .leftJoin(zones, eq(devices.zoneId, zones.id))
@@ -72,67 +91,133 @@ export async function findCaptureDevice(
     .limit(1);
   const row = rows[0];
   if (!row) return null;
-  return { ringDeviceId: row.ringDeviceId, name: row.name, zoneKind: row.zoneKind ?? null };
+  return {
+    ringDeviceId: row.ringDeviceId,
+    name: row.name,
+    zoneKind: row.zoneKind ?? null,
+    e2ee: row.e2ee,
+  };
 }
 
-/** Store one frame + its metadata record. Returns exactly what was written. */
-export async function saveCapture(dir: string, input: SaveCaptureInput): Promise<CaptureRecord> {
-  const id = captureId(input.capturedAt);
-  const extension = input.contentType === 'image/png' ? 'png' : 'jpg';
-  const file = `${IMAGE_DIR}/${id}.${extension}`;
-  const record: CaptureRecord = {
-    id,
-    capturedAt: input.capturedAt.toISOString(),
-    savedAt: new Date().toISOString(),
+export async function saveCapture(db: Db, input: SaveCaptureInput): Promise<CaptureRecord> {
+  const values = {
+    farmId: input.farmId,
+    eventId: input.eventId ?? null,
+    ringEventId: input.ringEventId ?? null,
     ringDeviceId: input.device.ringDeviceId,
     deviceName: input.device.name,
     zoneKind: input.device.zoneKind,
     source: input.source,
+    capturedAt: input.capturedAt,
     contentType: input.contentType,
-    bytes: input.bytes.byteLength,
-    file,
+    imageBytes: input.bytes,
   };
+  const inserted = await db
+    .insert(captures)
+    .values(values)
+    .onConflictDoNothing({ target: captures.ringEventId })
+    .returning(recordColumns);
 
-  await mkdir(path.join(dir, IMAGE_DIR), { recursive: true });
-  await writeFile(path.join(dir, file), input.bytes);
-  await appendFile(path.join(dir, INDEX_FILE), `${JSON.stringify(record)}\n`, 'utf8');
-  return record;
-}
-
-/** Newest first. A missing index (nothing captured yet) is simply empty. */
-export async function listCaptures(dir: string, limit = 100): Promise<CaptureRecord[]> {
-  let raw: string;
-  try {
-    raw = await readFile(path.join(dir, INDEX_FILE), 'utf8');
-  } catch {
-    return [];
-  }
-  const records: CaptureRecord[] = [];
-  for (const line of raw.split('\n')) {
-    if (line.trim() === '') continue;
-    try {
-      records.push(JSON.parse(line) as CaptureRecord);
-    } catch {
-      // A torn final line (crash mid-append) is skipped, never fatal.
-    }
-  }
-  return records.reverse().slice(0, limit);
-}
-
-/** Read one stored image. Only files inside `images/` are servable. */
-export async function readCaptureImage(
-  dir: string,
-  file: string,
-): Promise<{ bytes: Uint8Array; contentType: string } | null> {
-  const normalised = file.replace(/\\/g, '/');
-  if (!normalised.startsWith(`${IMAGE_DIR}/`) || normalised.includes('..')) return null;
-  try {
-    const stored = await readFile(path.join(dir, normalised));
+  if (inserted[0]) {
     return {
-      bytes: new Uint8Array(stored),
-      contentType: normalised.endsWith('.png') ? 'image/png' : 'image/jpeg',
+      ...inserted[0],
+      capturedAt: inserted[0].capturedAt.toISOString(),
+      savedAt: inserted[0].savedAt.toISOString(),
+      bytes: input.bytes.byteLength,
+      species: null,
+      confidence: null,
+      detectionStatus: null,
+      severity: null,
     };
-  } catch {
-    return null;
   }
+
+  if (input.ringEventId) {
+    const existing = await db
+      .select()
+      .from(captures)
+      .where(eq(captures.ringEventId, input.ringEventId))
+      .limit(1);
+    if (existing[0]) return toCaptureRecord(existing[0]);
+  }
+
+  throw new Error('Capture insert did not return a row and no duplicate event capture exists');
+}
+
+export async function markCapturePending(db: Db, eventId: string, captureId: string): Promise<void> {
+  await db
+    .insert(detections)
+    .values({
+      eventId,
+      species: 'unknown',
+      confidence: 0,
+      frameUrl: `/api/captures/image?id=${encodeURIComponent(captureId)}`,
+      status: 'pending',
+    })
+    .onConflictDoNothing({ target: detections.eventId });
+}
+
+export async function listCaptures(
+  db: Db,
+  farmId: string,
+  limit = 100,
+): Promise<CaptureRecord[]> {
+  const rows = await db
+    .select({
+      ...recordColumns,
+      bytes: sql<number>`octet_length(${captures.imageBytes})`,
+      species: detections.species,
+      confidence: detections.confidence,
+      detectionStatus: detections.status,
+      severity: sql<string | null>`(
+        select severity from alerts
+        where detection_id = ${detections.id}
+        order by case severity
+          when 'high' then 0
+          when 'medium' then 1
+          when 'low' then 2
+          else 3
+        end
+        limit 1
+      )`,
+    })
+    .from(captures)
+    .leftJoin(detections, eq(captures.eventId, detections.eventId))
+    .where(eq(captures.farmId, farmId))
+    .orderBy(desc(captures.capturedAt), desc(captures.savedAt))
+    .limit(limit);
+  return rows.map((row) => ({
+    ...row,
+    capturedAt: row.capturedAt.toISOString(),
+    savedAt: row.savedAt.toISOString(),
+  }));
+}
+
+export async function listCapturedEventIds(
+  db: Db,
+  farmId: string,
+  limit = 500,
+): Promise<Set<string>> {
+  const rows = await db
+    .select({ ringEventId: captures.ringEventId })
+    .from(captures)
+    .where(and(eq(captures.farmId, farmId), isNotNull(captures.ringEventId)))
+    .orderBy(desc(captures.capturedAt))
+    .limit(limit);
+  return new Set(
+    rows.map((row) => row.ringEventId).filter((id): id is string => id !== null),
+  );
+}
+
+export async function readCaptureImage(
+  db: Db,
+  id: string,
+): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  const rows = await db
+    .select({ bytes: captures.imageBytes, contentType: captures.contentType })
+    .from(captures)
+    .where(eq(captures.id, id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return { bytes: new Uint8Array(row.bytes), contentType: row.contentType };
 }

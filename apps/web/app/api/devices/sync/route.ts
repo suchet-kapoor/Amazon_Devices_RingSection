@@ -6,13 +6,6 @@ import { syncDevices } from '@/lib/devices';
 import { ensureFarm } from '@/lib/farms';
 import { describeRingError } from '@/lib/ring';
 
-/**
- * `POST /api/devices/sync` (F3): refresh the farm's cameras from
- * `GET /v1/devices?include=status,capabilities,location,configurations`.
- * The token is refreshed first when needed; a dead Ring session surfaces as a
- * readable "re-link" state, never a 500 (F1 criterion 7).
- */
-
 export const dynamic = 'force-dynamic';
 
 export async function POST(): Promise<NextResponse> {

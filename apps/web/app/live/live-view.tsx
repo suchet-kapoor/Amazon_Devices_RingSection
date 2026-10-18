@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-/** One camera, as the live page hands it to the client. */
 export interface LiveDevice {
   ringDeviceId: string;
   name: string;
@@ -11,26 +10,27 @@ export interface LiveDevice {
   e2ee: boolean;
 }
 
-/** One stored capture, mirroring `apps/web/lib/captures.ts`. */
 export interface CaptureRecord {
   id: string;
+  eventId: string | null;
+  ringEventId: string | null;
   capturedAt: string;
   savedAt: string;
+  ringDeviceId: string;
   deviceName: string;
   zoneKind: string | null;
   source: string;
+  contentType: string;
   bytes: number;
-  file: string;
+  species: string | null;
+  confidence: number | null;
+  detectionStatus: string | null;
+  severity: string | null;
 }
 
 const REFRESH_MS = 4000;
+const CAPTURES_REFRESH_MS = 10_000;
 
-/**
- * Near-live view + capture controls. The `<img>` points at `/api/frame`,
- * which the server re-snapshots on every request; bumping `tick` is what makes
- * the browser re-ask. Captures are listed newest-first and re-read after
- * every action, so what you see is exactly what is on disk.
- */
 export function LiveView({ devices }: { devices: LiveDevice[] }) {
   const [deviceIndex, setDeviceIndex] = useState(0);
   const [tick, setTick] = useState(0);
@@ -52,6 +52,11 @@ export function LiveView({ devices }: { devices: LiveDevice[] }) {
 
   useEffect(() => {
     void loadCaptures();
+  }, [loadCaptures]);
+
+  useEffect(() => {
+    const interval = setInterval(() => void loadCaptures(), CAPTURES_REFRESH_MS);
+    return () => clearInterval(interval);
   }, [loadCaptures]);
 
   /**
@@ -205,7 +210,7 @@ export function LiveView({ devices }: { devices: LiveDevice[] }) {
           {captures.map((capture) => (
             <li key={capture.id}>
               <img
-                src={`/api/captures/image?file=${encodeURIComponent(capture.file)}`}
+                src={`/api/captures/image?id=${encodeURIComponent(capture.id)}`}
                 alt={`Capture from ${capture.deviceName}`}
                 width={240}
               />
@@ -216,6 +221,17 @@ export function LiveView({ devices }: { devices: LiveDevice[] }) {
               <div>
                 captured {new Date(capture.capturedAt).toLocaleString()} ·{' '}
                 {Math.max(1, Math.round(capture.bytes / 1024))} KB
+              </div>
+              <div>
+                Animal:{' '}
+                {capture.detectionStatus === 'pending'
+                  ? 'Identification pending'
+                  : capture.species ?? 'Not analyzed'}
+                {capture.confidence === null ? '' : ` · ${Math.round(capture.confidence * 100)}%`}
+              </div>
+              <div>
+                Danger level: {capture.severity ?? 'Not assessed'}
+                {capture.detectionStatus === 'fallback' ? ' · analysis fallback' : ''}
               </div>
             </li>
           ))}
