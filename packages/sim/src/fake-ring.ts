@@ -339,7 +339,14 @@ export function createFakeRing(options: CreateFakeRingOptions = {}): FakeRing {
       const frame = path.match(/^\/media\/frames\/([^/]+)\.jpg$/);
       if (frame && method === 'GET') {
         const { bytes, contentType } = cannedFrame();
-        return new Response(bytes, { status: 200, headers: { 'content-type': contentType } });
+        // `new Uint8Array(bytes)` copies into an exactly-sized ArrayBuffer:
+        // under the DOM lib (the web app compiles this file too) a
+        // `Uint8Array<ArrayBufferLike>` is not a valid `BodyInit`, while a
+        // plain `ArrayBuffer` is valid in both the DOM and Node typings.
+        return new Response(new Uint8Array(bytes).buffer, {
+          status: 200,
+          headers: { 'content-type': contentType },
+        });
       }
       return fail(404, 'not_found', `No fake Ring route for ${method} ${path}`);
     } catch (error) {
