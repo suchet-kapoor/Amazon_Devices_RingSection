@@ -6,18 +6,19 @@ export const dynamic = 'force-dynamic';
 
 export default function VideoPage() {
   return (
-    <main>
-      <h1>Video animal check (development)</h1>
-      <p>
-        Development stand-in for a Ring feed: until real Ring API access lands, a plain video file
-        plays the role of the camera. As soon as an animal is spotted, the exact frame is captured
-        as a screenshot, sent to OpenRouter, and the verdict is shown on screen. The same
-        screenshot endpoint can accept a real Ring snapshot later without changes.
-      </p>
+    <main className="stack">
+      <header className="stack">
+        <h1>Camera check</h1>
+        <p>
+          No Ring device API needed: load one of your own videos or a snapshot, pick the camera it
+          belongs to, and the frame is sent to the AI model. The answer lands on screen -{' '}
+          <strong>Animal Score</strong> and <strong>Danger Type</strong> - and is saved to the
+          Postgres history for that camera in parallel.
+        </p>
+      </header>
       <VideoView />
       <p>
-        <Link href="/">Dashboard</Link> · <Link href="/live">Live watch &amp; captures</Link> ·{' '}
-        <Link href="/devices">Cameras &amp; zones</Link>
+        <Link href="/">Dashboard &amp; history</Link>
       </p>
     </main>
   );

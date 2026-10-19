@@ -1,113 +1,121 @@
 import Link from 'next/link';
-import { desc, eq } from 'drizzle-orm';
 
-import { devices, events } from '@predator-guard/db';
-
-import { loadConfig } from '@/lib/config';
+import { listCameras } from '@/lib/cameras';
 import { getDb } from '@/lib/db';
-import { ensureFarm } from '@/lib/farms';
+import { listRecentDetections, speciesSummaryByCamera } from '@/lib/history';
+import { zoneLabel } from '@/lib/zones';
 
-import { SimTools } from './sim-tools';
+import { CameraManager, type CameraItem } from './camera-manager';
 
 /**
  * Predator Guard dashboard.
  *
- * M1 is link & listen: this page shows the linking state, the camera count,
- * and the live event feed an accepted webhook lands in. The full timeline and
- * heatmap arrive with F8.
+ * The demo loop: feed a frame on /video, see the Animal Score and Danger
+ * Type on screen, and find the same result here afterwards - saved to the
+ * Postgres history, grouped per camera.
  */
 
 export const dynamic = 'force-dynamic';
 
+const BADGE_KINDS = ['critical', 'danger', 'warning', 'monitor', 'none'];
+
+function badgeClass(dangerType: string): string {
+  const slug = dangerType.toLowerCase();
+  return BADGE_KINDS.includes(slug) ? `badge badge-${slug}` : 'badge';
+}
+
+interface CameraSummary {
+  camera: CameraItem;
+  species: Array<{ species: string; count: number; worstDangerScore: number }>;
+}
+
 export default async function HomePage() {
   const db = await getDb();
-  const config = loadConfig();
-  const farm = await ensureFarm(db, config);
+  const cameras = await listCameras(db);
+  const recent = await listRecentDetections(db, 12);
+  const summary = await speciesSummaryByCamera(db);
 
-  const deviceCount = farm
-    ? (await db.select({ id: devices.id }).from(devices).where(eq(devices.farmId, farm.id))).length
-    : 0;
-  const recent = await db
-    .select({
-      id: events.id,
-      eventType: events.eventType,
-      eventClass: events.eventClass,
-      ringDeviceId: events.ringDeviceId,
-      receivedAt: events.receivedAt,
-    })
-    .from(events)
-    .orderBy(desc(events.receivedAt))
-    .limit(5);
+  const summaries: CameraSummary[] = cameras.map((camera) => ({
+    camera: { id: camera.id, name: camera.name, zoneKind: camera.zoneKind },
+    species: summary
+      .filter((row) => row.cameraId === camera.id)
+      .map((row) => ({
+        species: row.species,
+        count: row.count,
+        worstDangerScore: row.worstDangerScore,
+      })),
+  }));
 
   return (
-    <main>
-      <h1>Predator Guard</h1>
-      <p>A species-aware predator alarm built on the Ring Partner API.</p>
-
-      <h2>Ring account</h2>
-      {farm ? (
+    <main className="stack">
+      <header className="stack">
+        <h1>Predator Guard</h1>
         <p>
-          Linked to <strong>{farm.name}</strong> (Ring account <code>{farm.ringAccountId ?? '?'}</code>
-          ) · <Link href="/devices">{deviceCount} camera(s) — map zones</Link>
+          Point the AI model at a frame - from your own video or a snapshot - and it names the
+          animal, scores how sure it is, and grades the danger for the zone that camera watches.
+          Every result appears below and is saved to the Postgres history in parallel.
         </p>
-      ) : (
-        <p>Not linked yet.</p>
-      )}
-      {config.isSim ? (
-        <>
-          <p>
-            Simulator mode: no Ring credentials are configured, so the flows below run against the
-            bundled fake Ring API at <code>/api/sim</code>.
+        <p>
+          <Link href="/video">Open the camera check →</Link>
+        </p>
+      </header>
+
+      <section className="stack">
+        <h2>Cameras</h2>
+        <CameraManager cameras={summaries.map((entry) => entry.camera)} />
+      </section>
+
+      <section className="stack">
+        <h2>Animal types by camera</h2>
+        {cameras.length === 0 ? (
+          <p className="muted">No cameras yet - add your first camera above.</p>
+        ) : (
+          <div className="camera-grid">
+            {summaries.map(({ camera, species }) => (
+              <div key={camera.id} className="card">
+                <p>
+                  <strong>{camera.name}</strong>{' '}
+                  <span className="muted">{zoneLabel(camera.zoneKind)}</span>
+                </p>
+                {species.length === 0 ? (
+                  <p className="muted">No animals identified yet.</p>
+                ) : (
+                  <ul className="chip-list">
+                    {species.map((row) => (
+                      <li key={row.species}>
+                        {row.species} ×{row.count} · worst danger {row.worstDangerScore}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="stack">
+        <h2>Danger feed</h2>
+        {recent.length === 0 ? (
+          <p className="muted">
+            No analyses yet. Feed a frame on the <Link href="/video">camera check</Link>.
           </p>
-          <SimTools />
-        </>
-      ) : (
-        <p>Start the linking flow from the Ring app to connect an account.</p>
-      )}
-
-      <h2>Video animal check (development)</h2>
-      <p>
-        No real Ring API access yet? <Link href="/video">Open the video checker</Link>: drop in a
-        video file, the first animal frame is captured as a screenshot and identified via
-        OpenRouter, with the result shown on screen.
-      </p>
-
-      <h2>Recent events</h2>
-      {recent.length === 0 ? (
-        <p>No events yet. Accepted webhooks appear here immediately.</p>
-      ) : (
-        <ul>
-          {recent.map((event) => (
-            <li key={event.id}>
-              <code>{event.eventType}</code> ({event.eventClass}) from{' '}
-              <code>{event.ringDeviceId || 'unknown device'}</code> at{' '}
-              {event.receivedAt.toISOString()}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h2>Elsewhere</h2>
-      <ul>
-        <li>
-          <Link href="/devices">Cameras &amp; zones</Link>
-        </li>
-        <li>
-          <Link href="/live">Live watch &amp; captures</Link>
-        </li>
-        <li>
-          <Link href="/video">Video animal check (development)</Link>
-        </li>
-        <li>
-          Events API: <a href="/api/events">/api/events</a>
-        </li>
-        <li>
-          Health check: <a href="/api/health">/api/health</a>
-        </li>
-        <li>
-          Features and milestones: <code>docs/FEATURES.md</code>
-        </li>
-      </ul>
+        ) : (
+          <ul className="feed">
+            {recent.map((row) => (
+              <li key={row.id}>
+                <span className={badgeClass(row.dangerType)}>{row.dangerType}</span>
+                <strong>{row.animalScore}%</strong>
+                <span>{row.species}</span>
+                <span className="muted">{row.cameraName}</span>
+                <time className="muted" dateTime={row.capturedAt}>
+                  {new Date(row.capturedAt).toLocaleString()}
+                </time>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }

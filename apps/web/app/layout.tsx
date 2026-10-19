@@ -5,7 +5,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Predator Guard',
-  description: 'A species-aware predator alarm built on the Ring Partner API.',
+  description:
+    'Predator alert demo: AI identifies the animal in your camera frame and shows its score and danger type.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
