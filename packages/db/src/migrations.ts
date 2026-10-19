@@ -82,27 +82,9 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE "detections" ADD COLUMN IF NOT EXISTS "region" text`,
     ],
   },
-  {
-    id: '0001_captures',
-    statements: [
-      `CREATE TABLE IF NOT EXISTS "captures" (
-        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-        "farm_id" uuid NOT NULL REFERENCES "farms" ("id") ON DELETE CASCADE,
-        "event_id" uuid REFERENCES "events" ("id") ON DELETE SET NULL,
-        "ring_event_id" text,
-        "ring_device_id" text NOT NULL,
-        "device_name" text NOT NULL,
-        "zone_kind" text,
-        "source" text NOT NULL,
-        "captured_at" timestamptz NOT NULL,
-        "saved_at" timestamptz NOT NULL DEFAULT now(),
-        "content_type" text NOT NULL,
-        "image_bytes" bytea NOT NULL
-      )`,
-      `CREATE UNIQUE INDEX IF NOT EXISTS "captures_ring_event_id_idx" ON "captures" ("ring_event_id")`,
-      `CREATE INDEX IF NOT EXISTS "captures_farm_captured_at_idx" ON "captures" ("farm_id", "captured_at")`,
-    ],
-  },
+  // The former captures migration was removed: it referenced the legacy farms/events
+  // tables, which 0000_demo_init intentionally drops. Captures are not part of
+  // the current schema; keeping that migration made every fresh Postgres boot fail.
 ];
 
 /** Normalise `execute()` results across the postgres-js and PGlite drivers. */
