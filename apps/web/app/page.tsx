@@ -65,6 +65,13 @@ export default async function HomePage() {
         <p>Start the linking flow from the Ring app to connect an account.</p>
       )}
 
+      <h2>Video animal check (development)</h2>
+      <p>
+        No real Ring API access yet? <Link href="/video">Open the video checker</Link>: drop in a
+        video file, the first animal frame is captured as a screenshot and identified via
+        OpenRouter, with the result shown on screen.
+      </p>
+
       <h2>Recent events</h2>
       {recent.length === 0 ? (
         <p>No events yet. Accepted webhooks appear here immediately.</p>
@@ -87,6 +94,9 @@ export default async function HomePage() {
         </li>
         <li>
           <Link href="/live">Live watch &amp; captures</Link>
+        </li>
+        <li>
+          <Link href="/video">Video animal check (development)</Link>
         </li>
         <li>
           Events API: <a href="/api/events">/api/events</a>
