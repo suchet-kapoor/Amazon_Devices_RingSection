@@ -91,3 +91,34 @@ this demo — the app is fed by real videos and snapshots instead.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md). The short version: branch as `dev/<name>`, open a
 PR into `main`, and CI (type-check + build) must be green.
+
+
+## Temporary free PostgreSQL setup (Neon)
+
+The app can run locally with embedded PGlite, but Vercel serverless deployments should use a hosted PostgreSQL database. The free Neon plan is suitable for development/demo use:
+
+1. Create an account at [neon.tech](https://neon.tech/).
+2. Create a PostgreSQL project and copy the **pooled** connection string.
+3. Add `?sslmode=require` if it is not already present.
+4. For local development, put it in `apps/web/.env.local` (never commit this file):
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require
+PGLITE_DATA_DIR=.pglite
+```
+
+5. In Vercel, add the same value as a private `DATABASE_URL` environment variable for Preview and Production.
+6. Redeploy after changing environment variables.
+
+Do not put the real password in `README.md`, `.env.example`, or Git. Use `.env.example` only for variable names and placeholders. If `DATABASE_URL` is omitted locally, the app falls back to PGlite.
+
+### Vercel project settings
+
+For this monorepo use:
+
+- **Root Directory:** `apps/web`
+- **Framework:** Next.js
+- **Install Command:** `npm ci`
+- **Build Command:** `npm run build --workspace @predator-guard/web`
+
+The Ring simulator is enabled automatically in development when Ring credentials are absent. For real Ring API access, configure the Ring variables from `.env.example` in Vercel; do not use `RING_SIM=1` in production.
