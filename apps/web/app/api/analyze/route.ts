@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
-import { getCamera } from '@/lib/cameras';
+import { getFarm } from '@/lib/farm';
 import { getDb } from '@/lib/db';
+import { getCamera } from '@/lib/cameras';
 import { evaluateDanger, NO_DANGER } from '@/lib/danger';
 import { saveDetection } from '@/lib/history';
 import { jsonError } from '@/lib/http';
@@ -10,12 +11,9 @@ import { classifyAnimal } from '@/lib/vision';
 export const dynamic = 'force-dynamic';
 
 const Body = z.object({
-  /** base64 screenshot (data URL or raw base64). */
   imageBase64: z.string().min(1),
-  /** The camera this frame belongs to - history and rules are per camera. */
-  cameraId: z.string().uuid(),
+  cameraId: z.string().uuid().optional(),
   contentType: z.enum(['image/jpeg', 'image/png']).optional(),
-  /** seconds into the video where the frame was captured (display only). */
   timeframeSeconds: z.number().min(0).optional(),
 });
 
@@ -42,11 +40,9 @@ function decodeImage(
 }
 
 /**
- * POST one frame (snapshot or captured video frame) -> AI verdict -> danger
- * evaluation -> saved to the history, all in one round trip so the screen
- * and the database always agree.
- *
- * Statuses: 400 bad body/image, 404 unknown camera, 503 no model configured.
+ * POST a single frame (photo or video frame). If a cameraId is given, score
+ * against that camera's zone and record as 'camera'. If omitted, judge as a
+ * general manual check against the farm region and record as 'manual'.
  */
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -63,12 +59,19 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const db = await getDb();
-    const camera = await getCamera(db, parsed.data.cameraId);
-    if (!camera) {
-      return Response.json(
-        { error: 'camera_not_found', detail: 'Register this camera on the dashboard first.' },
-        { status: 404 },
-      );
+    const farm = await getFarm(db);
+    const region = farm?.region ?? null;
+
+    let camera: { id: string; name: string; zoneKind: string } | null = null;
+    if (parsed.data.cameraId) {
+      const found = await getCamera(db, parsed.data.cameraId);
+      if (!found) {
+        return Response.json(
+          { error: 'camera_not_found', detail: 'Register this camera on the dashboard first.' },
+          { status: 404 },
+        );
+      }
+      camera = { id: found.id, name: found.name, zoneKind: found.zoneKind };
     }
 
     const verdict = await classifyAnimal(image);
@@ -84,13 +87,16 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const capturedAt = new Date();
+    const zoneKind = camera ? (camera.zoneKind as any) : 'gate';
     const danger = verdict.peopleOnly
       ? NO_DANGER
-      : evaluateDanger(verdict.species, camera.zoneKind, capturedAt);
+      : evaluateDanger(verdict.species, zoneKind, capturedAt, region);
     const animalScore = Math.round(verdict.confidence * 100);
 
     const saved = await saveDetection(db, {
-      cameraId: camera.id,
+      cameraId: camera ? camera.id : null,
+      source: camera ? 'camera' : 'manual',
+      region,
       species: verdict.species,
       animalScore,
       dangerType: danger.dangerType,
@@ -103,7 +109,9 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     return Response.json({
-      camera: { id: camera.id, name: camera.name, zoneKind: camera.zoneKind },
+      source: saved.source,
+      camera,
+      farm: region ? { region } : null,
       animal: {
         species: verdict.species,
         score: animalScore,

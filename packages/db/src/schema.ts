@@ -10,15 +10,16 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { DETECTION_STATUSES, SEVERITIES, ZONE_KINDS } from '@predator-guard/ring';
+import { DETECTION_SOURCES, DETECTION_STATUSES, SEVERITIES, ZONE_KINDS } from '@predator-guard/ring';
 
 /**
  * `@predator-guard/db` - the Postgres data model for the demo.
  *
- * Two tables: the cameras the user registers in the app, and the analysis
- * history - one row per frame fed to the AI model, holding timestamp,
- * animal type, animal score and danger type so the dashboard can show the
- * result live and replay the history per camera.
+ * Three tables: the single-row farm profile (US region that tunes the danger
+ * rules), the cameras on the farm (auto-seeded with coop/barn/pasture/gate),
+ * and the analysis history - one row per frame fed to the AI model, holding
+ * timestamp, animal type, animal score and danger type so the dashboard can
+ * show the result live and replay the history per camera.
  *
  * Domain vocabularies (zone kinds, severities, statuses) are imported from
  * `@predator-guard/ring` so the schema and the rules engine cannot drift.
@@ -32,7 +33,21 @@ import { DETECTION_STATUSES, SEVERITIES, ZONE_KINDS } from '@predator-guard/ring
 
 const tz = { withTimezone: true } as const;
 
-/** One camera the user registered (name + the zone it watches). */
+/**
+ * The single-row farm profile. `region` selects the US predator profile that
+ * tunes the danger rules (a wolf is critical in Montana, implausible in
+ * Georgia). The row is auto-provisioned on first load, so the app works with
+ * zero setup.
+ */
+export const farmProfile = pgTable('farm_profile', {
+  /** Fixed primary key - there is exactly one farm in the demo. */
+  id: text('id').primaryKey().default('default'),
+  /** Region id from `@predator-guard/rules` (northeast, mountain-west...). */
+  region: text('region').notNull().default('midwest'),
+  updatedAt: timestamp('updated_at', tz).notNull().defaultNow(),
+});
+
+/** One camera on the farm (name + the zone it watches). */
 export const cameras = pgTable(
   'cameras',
   {
@@ -50,9 +65,12 @@ export const detections = pgTable(
   'detections',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    cameraId: uuid('camera_id')
-      .notNull()
-      .references(() => cameras.id, { onDelete: 'cascade' }),
+    /** Null for a manual upload check that is not tied to any camera. */
+    cameraId: uuid('camera_id').references(() => cameras.id, { onDelete: 'cascade' }),
+    /** 'camera' for a named-camera sighting, 'manual' for a one-off upload. */
+    source: text('source', { enum: DETECTION_SOURCES }).notNull().default('camera'),
+    /** Region active when the frame was judged (danger tuning context). */
+    region: text('region'),
     /** Animal type as the model named it (lowercase, free-form). */
     species: text('species').notNull().default('unknown'),
     /** Model confidence, 0..100 - the "Animal Score" shown on screen. */
@@ -75,3 +93,4 @@ export const detections = pgTable(
 
 export type Camera = typeof cameras.$inferSelect;
 export type Detection = typeof detections.$inferSelect;
+export type FarmProfile = typeof farmProfile.$inferSelect;

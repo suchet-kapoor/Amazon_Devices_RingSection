@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { createCamera, deleteCamera, listCameras } from '@/lib/cameras';
 import { getDb } from '@/lib/db';
+import { ensureFarm } from '@/lib/farm';
 import { jsonError } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
@@ -17,10 +18,11 @@ const DeleteQuery = z.object({
   id: z.string().uuid(),
 });
 
-/** List every camera the user registered (drives the selectors on /video). */
+/** List every camera on the farm (auto-provisions farm + default cameras). */
 export async function GET(): Promise<Response> {
   try {
     const db = await getDb();
+    await ensureFarm(db);
     return Response.json({ cameras: await listCameras(db) });
   } catch (err) {
     return jsonError(err);
@@ -33,6 +35,7 @@ export async function POST(request: Request): Promise<Response> {
     const parsed = CreateBody.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return Response.json({ error: 'Bad camera request' }, { status: 400 });
     const db = await getDb();
+    await ensureFarm(db);
     const camera = await createCamera(db, parsed.data);
     return Response.json({ camera }, { status: 201 });
   } catch (err) {
@@ -46,6 +49,7 @@ export async function DELETE(request: Request): Promise<Response> {
     const parsed = DeleteQuery.safeParse({ id: new URL(request.url).searchParams.get('id') });
     if (!parsed.success) return Response.json({ error: 'Bad camera id' }, { status: 400 });
     const db = await getDb();
+    await ensureFarm(db);
     const deleted = await deleteCamera(db, parsed.data.id);
     if (!deleted) return Response.json({ error: 'camera_not_found' }, { status: 404 });
     return Response.json({ deleted: true });

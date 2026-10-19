@@ -61,6 +61,27 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS "detections_camera_captured_idx" ON "detections" ("camera_id", "captured_at")`,
     ],
   },
+  {
+    id: '0001_farm_profile',
+    statements: [
+      // Single-row farm profile: the chosen US region tunes the danger rules.
+      `CREATE TABLE IF NOT EXISTS "farm_profile" (
+        "id" text PRIMARY KEY DEFAULT 'default' NOT NULL,
+        "region" text NOT NULL DEFAULT 'midwest',
+        "updated_at" timestamptz NOT NULL DEFAULT now()
+      )`,
+    ],
+  },
+  {
+    id: '0002_manual_checks',
+    statements: [
+      // Manual upload checks are not tied to a camera, so camera_id becomes
+      // nullable and every detection records its source and active region.
+      `ALTER TABLE "detections" ALTER COLUMN "camera_id" DROP NOT NULL`,
+      `ALTER TABLE "detections" ADD COLUMN IF NOT EXISTS "source" text NOT NULL DEFAULT 'camera'`,
+      `ALTER TABLE "detections" ADD COLUMN IF NOT EXISTS "region" text`,
+    ],
+  },
 ];
 
 /** Normalise `execute()` results across the postgres-js and PGlite drivers. */

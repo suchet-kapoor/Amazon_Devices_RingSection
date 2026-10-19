@@ -1,9 +1,11 @@
 import Link from 'next/link';
 
+import { getFarm, ensureFarm } from '@/lib/farm';
 import { listCameras } from '@/lib/cameras';
 import { getDb } from '@/lib/db';
 import { listRecentDetections, speciesSummaryByCamera } from '@/lib/history';
 import { zoneLabel } from '@/lib/zones';
+import { regionLabel, regionWatchlist, REGIONS, DEFAULT_REGION } from '@predator-guard/rules';
 
 import { CameraManager, type CameraItem } from './camera-manager';
 
@@ -31,8 +33,9 @@ interface CameraSummary {
 
 export default async function HomePage() {
   const db = await getDb();
+  const farm = await ensureFarm(db);
   const cameras = await listCameras(db);
-  const recent = await listRecentDetections(db, 12);
+  const recent = await listRecentDetections(db, 20);
   const summary = await speciesSummaryByCamera(db);
 
   const summaries: CameraSummary[] = cameras.map((camera) => ({
@@ -48,6 +51,7 @@ export default async function HomePage() {
 
   const trackedSpecies = new Set(summary.map((row) => row.species)).size;
   const peakThreat = recent.reduce((max, row) => Math.max(max, row.dangerScore), 0);
+  const watchlist = regionWatchlist(farm.region);
 
   return (
     <main className="stack">
@@ -62,9 +66,14 @@ export default async function HomePage() {
               on screen — saved to this camera&apos;s Postgres history in parallel.
             </p>
           </div>
-          <Link className="cta" href="/video">
-            Feed a frame →
-          </Link>
+          <div className="stack-sm" style={{ alignItems: 'flex-start' }}>
+            <Link className="cta" href="/video">
+              Feed a frame →
+            </Link>
+            <Link className="cta" href="/check" style={{ background: 'linear-gradient(140deg,#38bdf8,#0ea5e9)' }}>
+              Quick check (no camera) →
+            </Link>
+          </div>
         </div>
 
         <div className="stat-row">
@@ -88,6 +97,42 @@ export default async function HomePage() {
           </div>
         </div>
       </header>
+
+      <section className="stack">
+        <h2>Farm location &amp; predator profile</h2>
+        <p className="muted" style={{ margin: 0 }}>
+          Choose your US farm/homestead location. Each region tunes the danger rules to the
+          predators that actually live there (e.g. wolves are critical in the Mountain West, much
+          less so in many other regions).
+        </p>
+        <form className="row" action="/api/farm" method="post">
+          <label className="field" style={{ maxWidth: '320px' }}>
+            Farm location
+            <select name="region" defaultValue={farm.region ?? DEFAULT_REGION}>
+              {REGIONS.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label} — {r.states}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit">Save region</button>
+          <span className="muted">Current: {regionLabel(farm.region)}</span>
+        </form>
+        {watchlist.length > 0 && (
+          <div className="card stack-sm">
+            <strong>Predator watchlist for {regionLabel(farm.region)}</strong>
+            <ul className="chip-list">
+              {watchlist.map((row) => (
+                <li key={row.species}>
+                  {row.label}{' '}
+                  <span className="muted">· {row.threat === 'severe' ? 'severe' : row.threat === 'moderate' ? 'moderate' : 'rare'}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       <section className="stack">
         <h2>Cameras</h2>
@@ -139,9 +184,13 @@ export default async function HomePage() {
                 <span className={badgeClass(row.dangerType)}>{row.dangerType}</span>
                 <strong>{row.species}</strong>
                 <span className="muted">Animal Score {row.animalScore}%</span>
-                <span className="muted">
-                  {row.cameraName} · {zoneLabel(row.zoneKind)}
-                </span>
+                {row.source === 'manual' ? (
+                  <span className="muted">Manual check{row.region ? ` · ${regionLabel(row.region)}` : ''}</span>
+                ) : (
+                  <span className="muted">
+                    {row.cameraName ?? 'Camera'} · {zoneLabel(row.zoneKind ?? 'gate')}
+                  </span>
+                )}
                 <time className="muted" dateTime={row.capturedAt} style={{ marginLeft: 'auto' }}>
                   {new Date(row.capturedAt).toLocaleString()}
                 </time>

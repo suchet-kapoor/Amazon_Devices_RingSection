@@ -29,7 +29,9 @@ interface CameraOption {
 
 /** The reply of POST /api/analyze. */
 interface AnalysisResult {
-  camera: { id: string; name: string; zoneKind: string };
+  source: 'camera' | 'manual';
+  camera: { id: string; name: string; zoneKind: string } | null;
+  farm?: { region: string | null };
   animal: {
     species: string;
     score: number;
@@ -201,13 +203,13 @@ export function VideoView() {
           setStatus('Identification failed - see below.');
           return;
         }
-        if (!body?.animal || !body.danger || !body.camera) {
+        if (!body?.animal || !body.danger) {
           setFailure('The server returned an unexpected reply.');
           setStatus('Identification failed - see below.');
           return;
         }
         setResult(body);
-        setStatus(`Saved to history for ${body.camera.name} - see the dashboard.`);
+        setStatus(`Saved to history${body.camera ? ` for ${body.camera.name}` : ''} - see the dashboard.`);
       } catch {
         setFailure('Could not reach the server to identify the frame.');
         setStatus('Identification failed - see below.');
@@ -400,7 +402,9 @@ export function VideoView() {
                   {result.animal.peopleOnly ? 'People only - no animal' : result.animal.species}
                 </strong>
                 <span className="muted">
-                  on {result.camera.name} ({zoneLabel(result.camera.zoneKind)})
+                  {result.source === 'camera' && result.camera
+                    ? `on ${result.camera.name} (${zoneLabel(result.camera.zoneKind)})`
+                    : 'Manual quick check'}
                 </span>
               </div>
               <div className="result-grid">
@@ -428,7 +432,7 @@ export function VideoView() {
               </div>
               <p className="muted">
                 Saved to history at {new Date(result.capturedAt).toLocaleString()} -{' '}
-                <Link href="/">open the dashboard</Link> to see this camera&apos;s full history.
+                <Link href="/">open the dashboard</Link> to see the full history.
               </p>
             </>
           ) : null}

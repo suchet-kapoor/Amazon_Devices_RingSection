@@ -1,12 +1,13 @@
 import { desc, eq, sql } from 'drizzle-orm';
 
 import { cameras, detections, type Db } from '@predator-guard/db';
-import type { DetectionStatus, Severity } from '@predator-guard/ring';
+import type { DetectionSource, DetectionStatus, Severity } from '@predator-guard/ring';
 
 /**
  * The analysis history: every frame fed to the AI model is saved here
  * (timestamp, animal type, animal score, danger type) in parallel with the
- * on-screen result, and the dashboard reads it back per camera.
+ * on-screen result, and the dashboard reads it back per camera. Manual upload
+ * checks are saved too, with no camera attached.
  */
 
 /**
@@ -21,7 +22,8 @@ function toIsoString(value: Date | string): string {
 }
 
 export interface SaveDetectionInput {
-  cameraId: string;
+  /** Null for a manual upload check. */
+  cameraId: string | null;
   species: string;
   animalScore: number;
   dangerType: string;
@@ -31,6 +33,10 @@ export interface SaveDetectionInput {
   peopleOnly: boolean;
   status: DetectionStatus;
   capturedAt: Date;
+  /** 'camera' (default) or 'manual'. */
+  source?: DetectionSource;
+  /** Farm region active when the frame was judged. */
+  region?: string | null;
 }
 
 export async function saveDetection(
@@ -41,6 +47,8 @@ export async function saveDetection(
     .insert(detections)
     .values({
       cameraId: input.cameraId,
+      source: input.source ?? 'camera',
+      region: input.region ?? null,
       species: input.species,
       animalScore: input.animalScore,
       dangerType: input.dangerType,
@@ -57,12 +65,14 @@ export async function saveDetection(
   return inserted;
 }
 
-/** One row of the history feed, with the camera it belongs to. */
+/** One row of the history feed, with the camera it belongs to (if any). */
 export interface DetectionRow {
   id: string;
-  cameraId: string;
-  cameraName: string;
-  zoneKind: string;
+  cameraId: string | null;
+  cameraName: string | null;
+  zoneKind: string | null;
+  source: string;
+  region: string | null;
   species: string;
   animalScore: number;
   dangerType: string;
@@ -74,7 +84,7 @@ export interface DetectionRow {
   capturedAt: string;
 }
 
-/** Newest detections first - the dashboard's danger feed. */
+/** Newest detections first - the dashboard's threat log. */
 export async function listRecentDetections(db: Db, limit = 20): Promise<DetectionRow[]> {
   const rows = await db
     .select({
@@ -82,6 +92,8 @@ export async function listRecentDetections(db: Db, limit = 20): Promise<Detectio
       cameraId: detections.cameraId,
       cameraName: cameras.name,
       zoneKind: cameras.zoneKind,
+      source: detections.source,
+      region: detections.region,
       species: detections.species,
       animalScore: detections.animalScore,
       dangerType: detections.dangerType,
@@ -93,7 +105,7 @@ export async function listRecentDetections(db: Db, limit = 20): Promise<Detectio
       capturedAt: detections.capturedAt,
     })
     .from(detections)
-    .innerJoin(cameras, eq(detections.cameraId, cameras.id))
+    .leftJoin(cameras, eq(detections.cameraId, cameras.id))
     .orderBy(desc(detections.capturedAt))
     .limit(limit);
   return rows.map((row) => ({ ...row, capturedAt: toIsoString(row.capturedAt) }));
@@ -110,7 +122,7 @@ export interface CameraSpeciesRow {
   lastSeen: string;
 }
 
-/** Animal types per camera, most recently seen first. */
+/** Animal types per camera, most recently seen first (manual checks excluded). */
 export async function speciesSummaryByCamera(db: Db): Promise<CameraSpeciesRow[]> {
   // Raw SQL aggregates are not run through Drizzle's column mapper, so the
   // driver decides the JS type: PGlite/postgres-js hand `max(captured_at)`
