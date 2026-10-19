@@ -367,7 +367,7 @@ export function VideoView() {
         <Link href="/">Manage cameras</Link>
       </div>
 
-      <p role="status" aria-live="polite">
+      <p className="status" role="status" aria-live="polite">
         {status}
       </p>
 

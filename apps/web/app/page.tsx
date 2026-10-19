@@ -46,44 +46,78 @@ export default async function HomePage() {
       })),
   }));
 
+  const trackedSpecies = new Set(summary.map((row) => row.species)).size;
+  const peakThreat = recent.reduce((max, row) => Math.max(max, row.dangerScore), 0);
+
   return (
     <main className="stack">
-      <header className="stack">
-        <h1>Predator Guard</h1>
-        <p>
-          Point the AI model at a frame - from your own video or a snapshot - and it names the
-          animal, scores how sure it is, and grades the danger for the zone that camera watches.
-          Every result appears below and is saved to the Postgres history in parallel.
-        </p>
-        <p>
-          <Link href="/video">Open the camera check →</Link>
-        </p>
+      <header className="hero stack">
+        <div className="hero-top">
+          <div className="hero-copy">
+            <span className="eyebrow">Autonomous farm watch</span>
+            <h1>Predator Guard</h1>
+            <p>
+              Feed your own video or snapshot, pick the camera it belongs to, and the AI model names
+              the animal. You get an <strong>Animal Score</strong> and a <strong>Danger Type</strong>{' '}
+              on screen — saved to this camera&apos;s Postgres history in parallel.
+            </p>
+          </div>
+          <Link className="cta" href="/video">
+            Feed a frame →
+          </Link>
+        </div>
+
+        <div className="stat-row">
+          <div className="stat">
+            <div className="stat-value">{cameras.length}</div>
+            <div className="stat-label">Cameras</div>
+          </div>
+          <div className="stat">
+            <div className="stat-value">{recent.length}</div>
+            <div className="stat-label">Recent alerts</div>
+          </div>
+          <div className="stat">
+            <div className="stat-value">{trackedSpecies}</div>
+            <div className="stat-label">Species tracked</div>
+          </div>
+          <div className="stat">
+            <div className={`stat-value${peakThreat >= 60 ? ' is-alert' : ''}`}>
+              {peakThreat > 0 ? peakThreat : '—'}
+            </div>
+            <div className="stat-label">Peak threat</div>
+          </div>
+        </div>
       </header>
 
       <section className="stack">
         <h2>Cameras</h2>
-        <CameraManager cameras={summaries.map((entry) => entry.camera)} />
+        <CameraManager cameras={cameras} />
       </section>
 
       <section className="stack">
-        <h2>Animal types by camera</h2>
-        {cameras.length === 0 ? (
-          <p className="muted">No cameras yet - add your first camera above.</p>
+        <h2>Species by camera</h2>
+        {summaries.length === 0 ? (
+          <p className="muted">
+            No sightings yet. Add a camera and feed a frame to start building history.
+          </p>
         ) : (
           <div className="camera-grid">
             {summaries.map(({ camera, species }) => (
-              <div key={camera.id} className="card">
-                <p>
-                  <strong>{camera.name}</strong>{' '}
-                  <span className="muted">{zoneLabel(camera.zoneKind)}</span>
-                </p>
+              <div className="card stack-sm" key={camera.id}>
+                <div className="row" style={{ gap: '0.5rem' }}>
+                  <strong>{camera.name}</strong>
+                  <span className="badge badge-monitor">{zoneLabel(camera.zoneKind)}</span>
+                </div>
                 {species.length === 0 ? (
-                  <p className="muted">No animals identified yet.</p>
+                  <p className="muted" style={{ margin: 0 }}>
+                    No detections for this camera yet.
+                  </p>
                 ) : (
                   <ul className="chip-list">
                     {species.map((row) => (
                       <li key={row.species}>
-                        {row.species} ×{row.count} · worst danger {row.worstDangerScore}
+                        {row.species} × {row.count}
+                        <span className="muted"> · max {row.worstDangerScore}</span>
                       </li>
                     ))}
                   </ul>
@@ -95,20 +129,20 @@ export default async function HomePage() {
       </section>
 
       <section className="stack">
-        <h2>Danger feed</h2>
+        <h2>Threat log</h2>
         {recent.length === 0 ? (
-          <p className="muted">
-            No analyses yet. Feed a frame on the <Link href="/video">camera check</Link>.
-          </p>
+          <p className="muted">Nothing logged yet — the board is calm.</p>
         ) : (
           <ul className="feed">
             {recent.map((row) => (
               <li key={row.id}>
                 <span className={badgeClass(row.dangerType)}>{row.dangerType}</span>
-                <strong>{row.animalScore}%</strong>
-                <span>{row.species}</span>
-                <span className="muted">{row.cameraName}</span>
-                <time className="muted" dateTime={row.capturedAt}>
+                <strong>{row.species}</strong>
+                <span className="muted">Animal Score {row.animalScore}%</span>
+                <span className="muted">
+                  {row.cameraName} · {zoneLabel(row.zoneKind)}
+                </span>
+                <time className="muted" dateTime={row.capturedAt} style={{ marginLeft: 'auto' }}>
                   {new Date(row.capturedAt).toLocaleString()}
                 </time>
               </li>
