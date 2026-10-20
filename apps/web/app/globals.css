@@ -164,6 +164,13 @@ a:hover {
   border-color: var(--border);
 }
 
+.live-cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+
 .live {
   display: inline-flex;
   align-items: center;
@@ -173,6 +180,23 @@ a:hover {
   font-weight: 700;
   letter-spacing: 0.18em;
   color: var(--emerald);
+}
+
+/* Region clock: same colour as its icon (both inherit `currentColor`). */
+.region-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--emerald);
+}
+
+.region-clock svg {
+  flex: none;
+  opacity: 0.9;
 }
 
 .live::before {
@@ -822,7 +846,7 @@ img {
     font-size: 0.85rem;
   }
 
-  .live {
+  .live-cluster {
     display: none;
   }
 
