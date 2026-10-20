@@ -565,6 +565,48 @@ img {
   border-color: var(--border-strong);
 }
 
+/* Fixed-height scroll panels: long record lists scroll inside their section
+   instead of stretching the dashboard. `overscroll-behavior` keeps the page
+   from scrolling on once the inner list reaches its end. */
+
+.scroll-area {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.35rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+/* Roughly four camera rows, three threat-log rows. */
+.scroll-area--cameras {
+  max-height: 13rem;
+}
+
+.scroll-area--log {
+  max-height: 15.5rem;
+}
+
+.scroll-area--grid {
+  max-height: clamp(240px, 45vh, 440px);
+}
+
+.scroll-area::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-area::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.scroll-area::-webkit-scrollbar-thumb:hover {
+  background: var(--amber);
+}
+
 .chip-list {
   display: flex;
   flex-wrap: wrap;
