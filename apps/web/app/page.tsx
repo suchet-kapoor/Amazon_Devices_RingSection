@@ -5,9 +5,11 @@ import { listCameras } from '@/lib/cameras';
 import { getDb } from '@/lib/db';
 import { listRecentDetections, speciesSummaryByCamera } from '@/lib/history';
 import { zoneLabel } from '@/lib/zones';
-import { regionLabel, REGIONS, DEFAULT_REGION } from '@predator-guard/rules';
+import { regionLabel, REGIONS, DEFAULT_REGION, regionWatchlist as ruleWatchlist } from '@predator-guard/rules';
 
 import { CameraManager, type CameraItem } from './camera-manager';
+import { PredatorWatchlist } from './predator-watchlist';
+import { RegionForm } from './region-form';
 
 /**
  * Predator Guard dashboard.
@@ -105,33 +107,21 @@ export default async function HomePage() {
           predators that actually live there (e.g. wolves are critical in the Mountain West, much
           less so in many other regions).
         </p>
-        <form className="row" action="/api/farm" method="post">
-          <label className="field" style={{ maxWidth: '320px' }}>
-            Farm location
-            <select name="region" defaultValue={farm.region ?? DEFAULT_REGION}>
-              {REGIONS.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label} — {r.states}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit">Save region</button>
-          <span className="muted">Current: {regionLabel(farm.region)}</span>
-        </form>
-        {watchlist.length > 0 && (
-          <div className="card stack-sm">
-            <strong>Predator watchlist for {regionLabel(farm.region)}</strong>
-            <ul className="chip-list">
-              {watchlist.map((row) => (
-                <li key={row.species}>
-                  {row.label}{' '}
-                  <span className="muted">· {row.threat === 'severe' ? 'severe' : row.threat === 'moderate' ? 'moderate' : 'rare'}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <RegionForm
+          region={farm.region ?? DEFAULT_REGION}
+          regions={REGIONS.map((r) => ({ id: r.id, label: r.label, states: r.states }))}
+        />
+        <PredatorWatchlist
+          region={farm.region}
+          regionLabel={regionLabel(farm.region)}
+          entries={watchlist}
+          allRegions={REGIONS.map((region) => ({
+            id: region.id,
+            label: region.label,
+            states: region.states,
+            entries: ruleWatchlist(region.id),
+          }))}
+        />
       </section>
 
       <section className="stack">

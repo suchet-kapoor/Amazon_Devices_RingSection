@@ -583,6 +583,49 @@ img {
   background: var(--surface);
 }
 
+/* Region watchlist scope switch + all-regions comparison */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tab {
+  min-height: 0;
+  padding: 0.32rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.tab[aria-pressed='true'] {
+  color: #1a1200;
+  border-color: transparent;
+  background: linear-gradient(140deg, var(--amber), var(--amber-2));
+}
+
+.tab[aria-pressed='true']:hover:not(:disabled) {
+  color: #1a1200;
+}
+
+.region-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.region-list > div {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.region-list > div:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
 .camera-grid {
   display: grid;
   gap: 0.75rem;
