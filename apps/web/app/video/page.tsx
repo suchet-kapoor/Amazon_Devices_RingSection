@@ -1,8 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { VideoView } from './video-view';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Camera check',
+  description:
+    'Load a video or snapshot, pick the camera it belongs to, and get the Animal Score and Danger Type for the captured frame.',
+};
 
 export default function VideoPage() {
   return (

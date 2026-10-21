@@ -24,10 +24,10 @@ const DESCRIPTION =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: 'Predator Guard',
+  title: { default: 'Predator Guard', template: '%s · Predator Guard' },
   description: DESCRIPTION,
-  // Points AI tools and agents at the Markdown site map (/llms.txt).
-  alternates: { types: { 'text/plain': '/llms.txt' } },
+  // Points AI tools and agents at the Markdown site map and the API spec.
+  alternates: { types: { 'text/plain': '/llms.txt', 'application/openapi+json': '/openapi.json' } },
   openGraph: { title: 'Predator Guard', description: DESCRIPTION, type: 'website', siteName: 'Predator Guard' },
 };
 
@@ -83,7 +83,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             </div>
           </header>
           <div className="shell">
-            <aside className="sidebar">
+            <aside className="sidebar" aria-label="Emergency tools">
               <CritterCatch />
               <EmergencyContacts contacts={emergencyContactsFromEnv()} />
               <NearestEmergency />
