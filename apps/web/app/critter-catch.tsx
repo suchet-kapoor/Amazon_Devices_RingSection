@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 
 const EMOJIS = ['🦊', '🐗', '🐺', '🦝', '🐇'];
 const SIZE = 52;
+/** Keeps the critter at 25% of its original pace (well under 30%). */
+const SPEED_SCALE = 0.70;
 
 interface CritterState {
   x: number;
@@ -57,8 +59,8 @@ export function CritterCatch() {
       last = ts;
       const box = bounds();
 
-      state.x += state.vx * state.speed * dt;
-      state.y += state.vy * state.speed * dt;
+      state.x += state.vx * state.speed * SPEED_SCALE * dt;
+      state.y += state.vy * state.speed * SPEED_SCALE * dt;
       if (state.x < 0) { state.x = 0; state.vx = Math.abs(state.vx); }
       if (state.x > box.w) { state.x = box.w; state.vx = -Math.abs(state.vx); }
       if (state.y < 0) { state.y = 0; state.vy = Math.abs(state.vy); }
