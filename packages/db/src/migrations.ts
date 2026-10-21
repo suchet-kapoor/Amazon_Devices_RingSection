@@ -130,6 +130,17 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE "detections" ADD COLUMN IF NOT EXISTS "thumbnail" text`,
     ],
   },
+  {
+    id: '0006_detection_image_key',
+    statements: [
+      // The captured frame moves to the S3-compatible bucket; the database
+      // keeps only the object key. The inline thumbnail column is dropped -
+      // a picture in every row made the dashboard payload grow with the
+      // history.
+      `ALTER TABLE "detections" ADD COLUMN IF NOT EXISTS "image_key" text`,
+      `ALTER TABLE "detections" DROP COLUMN IF EXISTS "thumbnail"`,
+    ],
+  },
 
 ];
 

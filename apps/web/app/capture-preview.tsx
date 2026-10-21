@@ -12,8 +12,11 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 /** What the preview shows about one capture. */
 export interface CapturePreview {
-  /** Small JPEG data URL of the frame, null when the capture kept no picture. */
-  thumbnail: string | null;
+  /**
+   * Id of the detection whose frame is shown. The picture itself lives in
+   * the object bucket and is fetched through `/api/captures/<id>`.
+   */
+  captureId: string | null;
   species?: string;
   animalScore?: number;
   dangerType?: string;
@@ -99,11 +102,23 @@ export function CaptureRow({
         role="tooltip"
         style={spot ? { left: spot.left, top: spot.top } : undefined}
       >
-        {preview.thumbnail ? (
-          <img className="capture-card-image" src={preview.thumbnail} alt="Captured frame" />
-        ) : (
-          <p className="capture-card-empty">{preview.emptyNote ?? 'No frame stored for this capture'}</p>
-        )}
+        <div className="capture-card-frame">
+          {preview.captureId ? (
+            // Mounted only while the card is open, so the picture is fetched
+            // from the bucket on hover and not with the page.
+            open ? (
+              <img
+                className="capture-card-image"
+                src={`/api/captures/${preview.captureId}`}
+                alt="Captured frame"
+              />
+            ) : null
+          ) : (
+            <p className="capture-card-empty">
+              {preview.emptyNote ?? 'No frame stored for this capture'}
+            </p>
+          )}
+        </div>
         {preview.species ? (
           <div className="capture-card-meta">
             <strong>{preview.species}</strong>

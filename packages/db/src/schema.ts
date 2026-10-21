@@ -107,11 +107,12 @@ export const detections = pgTable(
     peopleOnly: boolean('people_only').notNull().default(false),
     status: text('status', { enum: DETECTION_STATUSES }).notNull().default('done'),
     /**
-     * Small JPEG of the analysed frame, as a data URL. Optional: older
-     * detections were recorded before the frame was kept, and the dashboard
+     * Object key of the captured frame in the S3-compatible bucket, e.g.
+     * `captures/<id>.jpg`. Optional: a detection can be recorded without a
+     * picture (storage not configured, upload failed), and the dashboard
      * shows "no frame stored" for those.
      */
-    thumbnail: text('thumbnail'),
+    imageKey: text('image_key'),
     /** When the frame was captured. */
     capturedAt: timestamp('captured_at', tz).notNull(),
     createdAt: timestamp('created_at', tz).notNull().defaultNow(),
