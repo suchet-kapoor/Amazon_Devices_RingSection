@@ -92,6 +92,16 @@ export async function getDetectionImageKey(
   return rows[0]?.imageKey ?? null;
 }
 
+/** True when a detection with this id exists - used to validate an upload link. */
+export async function detectionExists(db: Db, id: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: detections.id })
+    .from(detections)
+    .where(eq(detections.id, id))
+    .limit(1);
+  return rows.length > 0;
+}
+
 /** One row of the history feed, with the camera it belongs to (if any). */
 export interface DetectionRow {
   id: string;

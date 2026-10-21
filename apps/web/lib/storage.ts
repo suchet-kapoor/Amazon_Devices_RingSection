@@ -1,20 +1,25 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 /**
- * Object storage for the captured frames.
+ * Object storage for uploaded media and captured frames.
  *
- * Every analysed frame is kept in the S3-compatible bucket ("assets" on the
- * configured endpoint); the database only holds the object key. The bucket
+ * Every file is kept in the S3-compatible bucket ("assets" on the configured
+ * endpoint by default); the database only holds the object key. The bucket
  * stays private: reads go through a short-lived presigned URL that
- * `apps/web/app/api/captures/[id]/route.ts` hands to the browser.
+ * `app/api/captures/[id]` and `app/api/media/[id]` hand to the browser.
  *
  * Without credentials the app still works - frames are analysed and saved,
  * they are just not kept as pictures, and the dashboard says so.
  */
 
 /** How long a presigned read link stays valid. */
-const READ_URL_TTL_SECONDS = 300;
+export const READ_URL_TTL_SECONDS = 300;
 
 export interface StorageSettings {
   /** Custom endpoint (S3-compatible provider). Undefined = real AWS S3. */
@@ -85,14 +90,8 @@ function s3Client(settings: StorageSettings): S3Client {
   return client;
 }
 
-/** The object key of one capture, derived from the detection it belongs to. */
-export function captureKey(detectionId: string, contentType: string): string {
-  const extension = contentType === 'image/png' ? 'png' : 'jpg';
-  return `captures/${detectionId}.${extension}`;
-}
-
-/** Put one captured frame into the bucket. */
-export async function putCapture(
+/** Put one object into the bucket. */
+export async function putObject(
   key: string,
   body: Uint8Array,
   contentType: string,
@@ -108,8 +107,16 @@ export async function putCapture(
   );
 }
 
+/** Remove one object - used when the database row cannot be written. */
+export async function deleteObject(key: string): Promise<void> {
+  const settings = storageSettings();
+  await s3Client(settings).send(
+    new DeleteObjectCommand({ Bucket: settings.bucket, Key: key }),
+  );
+}
+
 /** A short-lived link that reads one object back. */
-export async function signedCaptureUrl(
+export async function signedObjectUrl(
   key: string,
   expiresInSeconds: number = READ_URL_TTL_SECONDS,
 ): Promise<string> {
@@ -119,4 +126,27 @@ export async function signedCaptureUrl(
     new GetObjectCommand({ Bucket: settings.bucket, Key: key }),
     { expiresIn: expiresInSeconds },
   );
+}
+
+/** The object key of one capture, derived from the detection it belongs to. */
+export function captureKey(detectionId: string, contentType: string): string {
+  const extension = contentType === 'image/png' ? 'png' : 'jpg';
+  return `captures/${detectionId}.${extension}`;
+}
+
+/** Put one captured frame into the bucket. */
+export async function putCapture(
+  key: string,
+  body: Uint8Array,
+  contentType: string,
+): Promise<void> {
+  await putObject(key, body, contentType);
+}
+
+/** A short-lived link that reads one captured frame. */
+export async function signedCaptureUrl(
+  key: string,
+  expiresInSeconds: number = READ_URL_TTL_SECONDS,
+): Promise<string> {
+  return signedObjectUrl(key, expiresInSeconds);
 }

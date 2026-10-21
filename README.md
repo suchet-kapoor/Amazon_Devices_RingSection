@@ -61,6 +61,16 @@ docker compose up -d db
 Two tables carry the demo: `cameras` (what the user registers) and `detections` (timestamp,
 animal type, animal score, danger type/score, per camera).
 
+### Object storage
+
+The photo or video the user picks and the analysed frame are kept in an S3-compatible bucket
+(`uploads/<id>.<ext>`, `captures/<id>.jpg`); the database holds only the object key. Reads go
+through `/api/media/<id>` and `/api/captures/<id>`, which redirect to a fresh five-minute
+presigned URL. Configure `AWS_ENDPOINT_URL_S3`, `AWS_S3_BUCKET`, `AWS_REGION`,
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in `apps/web/.env.local`. The bucket must
+already exist — the app never creates one. Without valid storage settings the analysis still
+runs, but the files are not kept.
+
 ## How it fits together
 
 | Piece | What it does |

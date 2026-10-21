@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'reac
 import { regionLabel } from '@predator-guard/rules';
 
 import { bestAnimal, formatTimeframe } from '@/lib/animal-filter';
+import { linkMedia, uploadMedia, type UploadedMedia } from '@/lib/upload-media';
 import { zoneLabel } from '@/lib/zones';
 
 /** Predictions as returned by @tensorflow-models/coco-ssd (kept structural to avoid a type-only import). */
@@ -131,6 +132,8 @@ function frameFromImageFile(file: File): Promise<string> {
 export function VideoView() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const busyRef = useRef(false);
+  const uploadRef = useRef<Promise<UploadedMedia | null> | null>(null);
+  const uploadSeq = useRef(0);
 
   const [cameras, setCameras] = useState<CameraOption[]>([]);
   const [cameraId, setCameraId] = useState('');
@@ -142,6 +145,9 @@ export function VideoView() {
   const [failure, setFailure] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<number | null>(null);
   const [localDetector, setLocalDetector] = useState<string | null>(null);
+  const [stored, setStored] = useState<UploadedMedia | null>(null);
+  const [storing, setStoring] = useState(false);
+  const [storeError, setStoreError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,6 +185,43 @@ export function VideoView() {
       if (videoUrl) URL.revokeObjectURL(videoUrl);
     };
   }, [videoUrl]);
+
+  /**
+   * Upload the picked video/photo as soon as it is chosen; the analysis only
+   * links it to the detection row afterwards. An upload failure is reported
+   * but never discards the verdict.
+   */
+  const startUpload = useCallback((file: File) => {
+    const seq = ++uploadSeq.current;
+    setStoring(true);
+    setStored(null);
+    setStoreError(null);
+    const task = uploadMedia(file)
+      .then((media) => {
+        if (seq === uploadSeq.current) setStored(media);
+        return media;
+      })
+      .catch((error) => {
+        if (seq === uploadSeq.current) {
+          setStoreError(error instanceof Error ? error.message : String(error));
+        }
+        return null;
+      })
+      .finally(() => {
+        if (seq === uploadSeq.current) setStoring(false);
+      });
+    uploadRef.current = task;
+  }, []);
+
+  const linkStoredMedia = useCallback(async (detectionId: string) => {
+    const media = await uploadRef.current;
+    if (!media) return;
+    try {
+      setStored(await linkMedia(media.id, detectionId));
+    } catch (error) {
+      setStoreError(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
 
   /** One frame -> /api/analyze -> verdict + danger + saved history row. */
   const analyze = useCallback(
@@ -219,6 +262,7 @@ export function VideoView() {
         }
         setResult(body);
         setStatus(`Saved to history${body.camera ? ` for ${body.camera.name}` : ''} - see the dashboard.`);
+        void linkStoredMedia(body.detectionId);
       } catch {
         setFailure('Could not reach the server to identify the frame.');
         setStatus('Identification failed - see below.');
@@ -226,7 +270,7 @@ export function VideoView() {
         busyRef.current = false;
       }
     },
-    [cameraId],
+    [cameraId, linkStoredMedia],
   );
 
   const captureCurrentFrame = useCallback(async (): Promise<boolean> => {
@@ -288,6 +332,7 @@ export function VideoView() {
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    startUpload(file);
     setLocalDetector(null);
     setFrame(null);
     setResult(null);
@@ -304,6 +349,7 @@ export function VideoView() {
       setStatus('Choose a camera first - add one on the dashboard.');
       return;
     }
+    startUpload(file);
     setLocalDetector(null);
     setStatus('Reading the snapshot...');
     try {
@@ -321,6 +367,8 @@ export function VideoView() {
     setFrame(null);
     setResult(null);
     setFailure(null);
+    setStored(null);
+    setStoreError(null);
     setStatus('Ready - press play, then "Watch for animal", or feed a snapshot.');
   }
 
@@ -340,11 +388,20 @@ export function VideoView() {
         </label>
         <label className="field">
           Video file
-          <input type="file" accept="video/*" onChange={onFileChange} />
+          <input
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime"
+            onChange={onFileChange}
+          />
         </label>
         <label className="field">
           Snapshot (instead of a video)
-          <input type="file" accept="image/*" onChange={onSnapshotChange} disabled={!cameraId} />
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            onChange={onSnapshotChange}
+            disabled={!cameraId}
+          />
         </label>
       </div>
 
@@ -445,12 +502,28 @@ export function VideoView() {
               </p>
             </>
           ) : null}
+          {storing ? <p className="muted">Storing the original file in the bucket...</p> : null}
+          {stored ? (
+            <p className="muted">
+              Original {stored.kind} stored ({Math.round(stored.sizeBytes / 1024)} kB) -{' '}
+              <a href={stored.url} target="_blank" rel="noreferrer">
+                open the stored copy
+              </a>
+              .
+            </p>
+          ) : null}
+          {storeError ? (
+            <p className="failure" role="alert">
+              The analysis was saved, but the original file could not be stored: {storeError}
+            </p>
+          ) : null}
         </section>
       ) : null}
 
       <p className="muted">
-        The video never leaves your browser - only the single captured frame is sent to the server
-        for identification. The animal name is an estimate - always check the frame before acting.
+        Only the captured frame is sent to the AI model. The original photo or video is kept in your
+        own object bucket, linked to the saved detection. The animal name is an estimate - always
+        check the frame before acting.
       </p>
     </section>
   );

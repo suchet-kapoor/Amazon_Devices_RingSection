@@ -71,12 +71,12 @@ function decodeImage(
     contentType = dataUrl[1]!.toLowerCase() === 'image/png' ? 'image/png' : 'image/jpeg';
     raw = dataUrl[2]!;
   }
-  let bytes: Uint8Array;
-  try {
-    bytes = new Uint8Array(Buffer.from(raw, 'base64'));
-  } catch {
-    return null;
-  }
+  raw = raw.replace(/\s+/g, '');
+  // Reject obvious non-base64 before allocating; Buffer.from is lenient and
+  // silently drops invalid characters.
+  if (raw.length === 0 || raw.length > MAX_IMAGE_BYTES * 1.4) return null;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(raw)) return null;
+  const bytes = new Uint8Array(Buffer.from(raw, 'base64'));
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return null;
   return { bytes, contentType };
 }

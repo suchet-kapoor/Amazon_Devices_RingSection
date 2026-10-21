@@ -141,6 +141,25 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE "detections" DROP COLUMN IF EXISTS "thumbnail"`,
     ],
   },
+  {
+    id: '0007_media_uploads',
+    statements: [
+      // Original files the user picked (photo or video). The bucket holds the
+      // bytes; this row holds the key, the metadata and the analysis it fed.
+      `CREATE TABLE IF NOT EXISTS "media_uploads" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "detection_id" uuid REFERENCES "detections" ("id") ON DELETE SET NULL,
+        "kind" text NOT NULL,
+        "filename" text NOT NULL,
+        "content_type" text NOT NULL,
+        "size_bytes" integer NOT NULL,
+        "object_key" text NOT NULL,
+        "created_at" timestamptz NOT NULL DEFAULT now()
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "media_uploads_object_key_idx" ON "media_uploads" ("object_key")`,
+      `CREATE INDEX IF NOT EXISTS "media_uploads_detection_idx" ON "media_uploads" ("detection_id")`,
+    ],
+  },
 
 ];
 

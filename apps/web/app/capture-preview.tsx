@@ -52,6 +52,14 @@ export function CaptureRow({
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [spot, setSpot] = useState<Spot | null>(null);
+  /**
+   * The frame that has already been mounted. Keeping it in the DOM after the
+   * first hover means a second hover reuses the decoded image instead of
+   * asking `/api/captures/<id>` (and therefore Postgres) again.
+   *
+   * It is only set on hover, so the dashboard still loads with no images.
+   */
+  const [frameSrc, setFrameSrc] = useState<string | null>(null);
 
   const place = useCallback(() => {
     const row = rowRef.current;
@@ -91,6 +99,9 @@ export function CaptureRow({
       ref={rowRef}
       onMouseEnter={() => {
         setOpen(true);
+        // Same id -> same string -> React keeps the existing <img> and its
+        // bytes; only a changed capture triggers a new request.
+        if (preview.captureId) setFrameSrc(`/api/captures/${preview.captureId}`);
         place();
       }}
       onMouseLeave={() => setOpen(false)}
@@ -104,13 +115,14 @@ export function CaptureRow({
       >
         <div className="capture-card-frame">
           {preview.captureId ? (
-            // Mounted only while the card is open, so the picture is fetched
-            // from the bucket on hover and not with the page.
-            open ? (
+            // Mounted after the first hover and kept, so re-hovering does not
+            // fetch it (or hit the database) again.
+            frameSrc ? (
               <img
                 className="capture-card-image"
-                src={`/api/captures/${preview.captureId}`}
+                src={frameSrc}
                 alt="Captured frame"
+                decoding="async"
               />
             ) : null
           ) : (

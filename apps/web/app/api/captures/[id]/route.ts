@@ -1,8 +1,16 @@
+import { z } from 'zod';
+
 import { getDb } from '@/lib/db';
 import { getDetectionImageKey } from '@/lib/history';
-import { signedCaptureUrl } from '@/lib/storage';
+import {
+  READ_URL_TTL_SECONDS,
+  signedCaptureUrl,
+  storageConfigured,
+} from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
+
+const DetectionId = z.string().uuid();
 
 /**
  * The picture of one capture.
@@ -16,18 +24,38 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const { id } = await params;
+  const parsed = DetectionId.safeParse((await params).id);
+  if (!parsed.success) {
+    return Response.json({ error: 'capture_not_found' }, { status: 404 });
+  }
+
   const db = await getDb();
-  const imageKey = await getDetectionImageKey(db, id);
+  const imageKey = await getDetectionImageKey(db, parsed.data);
   if (!imageKey) {
     return Response.json(
       { error: 'no_frame', detail: 'This capture has no stored frame.' },
       { status: 404 },
     );
   }
+  if (!storageConfigured()) {
+    return Response.json(
+      { error: 'storage_not_configured', detail: 'Object storage credentials are missing.' },
+      { status: 503 },
+    );
+  }
+
   try {
     const url = await signedCaptureUrl(imageKey);
-    return Response.redirect(url, 302);
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: url,
+        // Cache the redirect for less than the signature's lifetime, so a
+        // reload/re-hover inside a few minutes skips the DB lookup too. After
+        // that the browser asks this route again and gets a fresh link.
+        'Cache-Control': `private, max-age=${READ_URL_TTL_SECONDS - 60}`,
+      },
+    });
   } catch (err) {
     return Response.json(
       {
