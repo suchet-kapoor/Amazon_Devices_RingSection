@@ -50,6 +50,8 @@ things we would tell Ring to fix.
 
 | 40 | 2026-10-21 | Web / dashboard | A request to make "Peak Threats" navigate to "Threat Alerts" and "Camera" navigate to "Camera" named elements that **do not exist in the code**: the dashboard says "Peak threat" and "Threat log", and its camera list is a section, not a page | The target of every click had to be guessed from the labels; a wrong guess would have shipped links to nowhere | Mapped the request onto the dashboard stat cards (each summarizes exactly one section), gave the sections `id`s, and renamed "Threat log" to "Threat alerts" so the destination matches the wording used in the request | Use the labels a user sees in the request, and keep ticket wording in sync with the UI |
 
+| 41 | 2026-10-21 | Web / hero buttons | The second hero CTA set its own colour with an **inline style** (`style={{ background: 'linear-gradient(...)' }}`), so a class-level effect (the new glow border) could not match it - the sky button would have kept the amber halo of the first one | The two buttons looked like they belonged to different themes, and any shared state (hover, focus, glow) had to be special-cased in CSS with no way to reach the inline value | Moved the colour to a `.cta--sky` class and gave `.cta` a `--cta-glow` custom property, so one rule styles both variants | Style variants in CSS, not in inline styles, so shared states (hover/focus/glow) apply to every variant |
+
 ## Template
 
 ```

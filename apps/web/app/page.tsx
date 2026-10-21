@@ -70,7 +70,7 @@ export default async function HomePage() {
             <Link className="cta" href="/video">
               Feed a frame →
             </Link>
-            <Link className="cta" href="/check" style={{ background: 'linear-gradient(140deg,#38bdf8,#0ea5e9)' }}>
+            <Link className="cta cta--sky" href="/check">
               Quick check (no camera) →
             </Link>
           </div>
