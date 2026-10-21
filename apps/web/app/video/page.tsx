@@ -19,7 +19,7 @@ export default function VideoPage() {
           </p>
         </div>
         <div className="row">
-          <Link className="cta" href="/check" style={{ background: 'linear-gradient(140deg,#38bdf8,#0ea5e9)' }}>
+          <Link className="cta cta--sky" href="/check">
             Go to Quick check (no camera) →
           </Link>
         </div>
