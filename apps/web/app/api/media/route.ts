@@ -49,7 +49,7 @@ export async function POST(request: Request): Promise<Response> {
         {
           error: 'storage_not_configured',
           detail:
-            'Object storage is not configured. Set AWS_ENDPOINT_URL_S3, AWS_S3_BUCKET, AWS_REGION, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in apps/web/.env.local.',
+            'Object storage is not configured. Set AWS_ENDPOINT_URL_S3, AWS_S3_BUCKET, AWS_REGION, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env.local at the repository root.',
         },
         { status: 503 },
       );

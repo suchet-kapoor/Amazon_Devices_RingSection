@@ -12,7 +12,7 @@
     "build": "npm run build --workspace @predator-guard/web",
     "start": "npm run start --workspace @predator-guard/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "storage:inspect": "node --env-file=apps/web/.env.local scripts/storage-inspect.mjs"
+    "storage:inspect": "node --env-file=.env.local scripts/storage-inspect.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

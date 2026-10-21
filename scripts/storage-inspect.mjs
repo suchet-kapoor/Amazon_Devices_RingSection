@@ -23,7 +23,7 @@ const REQUIRED = [
 const missing = REQUIRED.filter((name) => !process.env[name]?.trim());
 if (missing.length > 0) {
   console.error(`Missing env values: ${missing.join(', ')}`);
-  console.error('Run through npm run storage:inspect (it loads apps/web/.env.local).');
+  console.error('Run through npm run storage:inspect (it loads .env.local at the repository root).');
   process.exit(1);
 }
 
