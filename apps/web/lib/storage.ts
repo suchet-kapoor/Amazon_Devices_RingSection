@@ -34,7 +34,12 @@ export interface StorageSettings {
 
 function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
   const value = env[name];
-  return value && value.trim() !== '' ? value.trim() : undefined;
+  if (!value) return undefined;
+  // A value pasted from a .env line keeps its quotes on Vercel (`"https://…"`),
+  // because dotenv strips them but the dashboard stores the text verbatim. The
+  // S3 client then answers `Invalid URL` on the first upload.
+  const unquoted = value.trim().replace(/^(['"])(.*)\1$/, '$2').trim();
+  return unquoted !== '' ? unquoted : undefined;
 }
 
 /** The storage settings, read from the environment. */

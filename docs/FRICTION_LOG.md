@@ -77,6 +77,8 @@ things we would tell Ring to fix.
 
 | 56 | 2026-10-21 | Repo / env | Configuration was spread over a root `.env.example` and `apps/web/.env.local`, and every README line, error message and script pointed at the app-directory copy. The root template was the documented entry point but the runtime file lived elsewhere, so a new dev could easily edit the wrong one | Two "sources of truth" for one set of variables, with the working file hidden inside `apps/web` and the template outside it | Kept a single runtime file at the repository root (`.env.local`, gitignored) next to the tracked `.env.example`, deleted `apps/web/.env.local`, and `apps/web/next.config.mjs` now calls `loadEnvConfig(repoRoot)` so Next reads the root file; scripts, README and UI error messages point at the root file | Make the env directory a first-class Next setting, so a monorepo can keep one env file at its root without a custom loader |
 
+| 57 | 2026-10-22 | Deploy / env | Values copied from `.env.local` into the Vercel dashboard kept their quotes (`AWS_ENDPOINT_URL_S3="https://…"`), so the S3 client answered `Invalid URL` on every upload while the analysis itself still saved | The preview only said "the bucket rejected the upload", which reads like a wrong bucket or bad keys - the actual cause was one stray character in one variable | `readEnv` now strips the surrounding quotes (what dotenv already does), so a pasted `.env` line works either way; the preview itself was fixed by clearing the quotes in Vercel and redeploying | A hosting dashboard should normalise `.env` syntax on paste, or the app should name the variable that failed to parse |
+
 ## Template
 
 ```
