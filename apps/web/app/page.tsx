@@ -51,8 +51,6 @@ export default async function HomePage() {
       })),
   }));
 
-  const trackedSpecies = new Set(summary.map((row) => row.species)).size;
-  const peakThreat = recent.reduce((max, row) => Math.max(max, row.dangerScore), 0);
   const watchlist = await listFarmWatchlist(db, farm.region);
 
   return (
@@ -79,24 +77,22 @@ export default async function HomePage() {
         </div>
 
         <div className="stat-row">
-          <div className="stat">
-            <div className="stat-value">{cameras.length}</div>
-            <div className="stat-label">Cameras</div>
-          </div>
-          <div className="stat">
-            <div className="stat-value">{recent.length}</div>
-            <div className="stat-label">Recent alerts</div>
-          </div>
-          <div className="stat">
-            <div className="stat-value">{trackedSpecies}</div>
-            <div className="stat-label">Species tracked</div>
-          </div>
-          <div className="stat">
-            <div className={`stat-value${peakThreat >= 60 ? ' is-alert' : ''}`}>
-              {peakThreat > 0 ? peakThreat : '—'}
-            </div>
-            <div className="stat-label">Peak threat</div>
-          </div>
+          <a
+            className="stat stat--link"
+            href="#cameras"
+            aria-label={`${cameras.length} cameras - jump to the camera list`}
+          >
+            <span className="stat-value">{cameras.length}</span>
+            <span className="stat-label">Cameras</span>
+          </a>
+          <a
+            className="stat stat--link"
+            href="#threat-alerts"
+            aria-label={`${recent.length} recent alerts - jump to the threat alerts`}
+          >
+            <span className="stat-value">{recent.length}</span>
+            <span className="stat-label">Recent alerts</span>
+          </a>
         </div>
       </header>
 
@@ -124,14 +120,14 @@ export default async function HomePage() {
         />
       </section>
 
-      <section className="stack">
+      <section className="stack" id="cameras">
         <h2>
           Cameras <span className="muted">· {regionLabel(farm.region)}</span>
         </h2>
         <CameraManager cameras={cameras} />
       </section>
 
-      <section className="stack">
+      <section className="stack" id="species">
         <h2>
           Species by camera <span className="muted">· {regionLabel(farm.region)}</span>
         </h2>
@@ -170,9 +166,9 @@ export default async function HomePage() {
         )}
       </section>
 
-      <section className="stack">
+      <section className="stack" id="threat-alerts">
         <h2>
-          Threat log <span className="muted">· {regionLabel(farm.region)}</span>
+          Threat alerts <span className="muted">· {regionLabel(farm.region)}</span>
         </h2>
         {recent.length === 0 ? (
           <p className="muted">Nothing logged in {regionLabel(farm.region)} yet — the board is calm.</p>
