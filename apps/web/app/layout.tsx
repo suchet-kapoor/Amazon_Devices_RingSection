@@ -7,6 +7,7 @@ import { DEFAULT_REGION, regionById, regionTimeZone } from '@predator-guard/rule
 import { getDb } from '@/lib/db';
 import { emergencyContactsFromEnv } from '@/lib/emergency-contacts';
 import { getFarm } from '@/lib/farm';
+import { siteUrl } from '@/lib/site';
 
 import { CritterCatch } from './critter-catch';
 import { EmergencyContacts } from './emergency-contacts';
@@ -18,11 +19,29 @@ import './sidebar.css';
 
 export const dynamic = 'force-dynamic';
 
+const DESCRIPTION =
+  'Feed your own video or snapshot, let the AI name the animal, and get an Animal Score and Danger Type saved to per-camera history.';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl()),
   title: 'Predator Guard',
-  description:
-    'Feed your own video or snapshot, let the AI name the animal, and get an Animal Score and Danger Type saved to per-camera history.',
+  description: DESCRIPTION,
+  // Points AI tools and agents at the Markdown site map (/llms.txt).
+  alternates: { types: { 'text/plain': '/llms.txt' } },
+  openGraph: { title: 'Predator Guard', description: DESCRIPTION, type: 'website', siteName: 'Predator Guard' },
 };
+
+// schema.org description of the app, read by search engines and AI agents.
+const JSON_LD = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  name: 'Predator Guard',
+  url: siteUrl(),
+  description: DESCRIPTION,
+  applicationCategory: 'SecurityApplication',
+  operatingSystem: 'Web',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+});
 
 function ShieldIcon() {
   return (
@@ -46,6 +65,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON_LD }} />
         <div className="page">
           <header className="topbar">
             <Link href="/" className="brand">
