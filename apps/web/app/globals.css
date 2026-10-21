@@ -630,6 +630,54 @@ img {
   border-color: var(--border-strong);
 }
 
+/* Hover preview of the frame that was captured. Fixed positioning keeps it
+   out of the scroll panels around the lists, which would clip an
+   absolutely positioned card. */
+
+.capture-card {
+  position: fixed;
+  z-index: 40;
+  width: 240px;
+  padding: 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(8, 13, 11, 0.96);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.capture-card.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.capture-card-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.capture-card-empty {
+  margin: 0;
+  padding: 1.4rem 0.5rem;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.capture-card-meta {
+  display: grid;
+  gap: 0.1rem;
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+}
+
 /* Fixed-height scroll panels: long record lists scroll inside their section
    instead of stretching the dashboard. `overscroll-behavior` keeps the page
    from scrolling on once the inner list reaches its end. */

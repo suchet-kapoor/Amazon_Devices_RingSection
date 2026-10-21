@@ -3,11 +3,16 @@ import Link from 'next/link';
 import { getFarm, ensureFarm, listFarmWatchlist } from '@/lib/farm';
 import { listCameras } from '@/lib/cameras';
 import { getDb } from '@/lib/db';
-import { listRecentDetections, speciesSummaryByCamera } from '@/lib/history';
+import {
+  listLatestDetectionByCamera,
+  listRecentDetections,
+  speciesSummaryByCamera,
+} from '@/lib/history';
 import { zoneLabel } from '@/lib/zones';
 import { regionLabel, REGIONS, DEFAULT_REGION, regionWatchlist as ruleWatchlist } from '@predator-guard/rules';
 
 import { CameraManager, type CameraItem } from './camera-manager';
+import { CaptureRow } from './capture-preview';
 import { PredatorWatchlist } from './predator-watchlist';
 import { RegionForm } from './region-form';
 
@@ -39,6 +44,26 @@ export default async function HomePage() {
   const cameras = await listCameras(db, farm.region);
   const recent = await listRecentDetections(db, farm.region, 20);
   const summary = await speciesSummaryByCamera(db, farm.region);
+  const latestCaptures = await listLatestDetectionByCamera(db, farm.region);
+  const latestByCamera = new Map(latestCaptures.map((row) => [row.cameraId, row]));
+
+  const cameraItems: CameraItem[] = cameras.map((camera) => {
+    const latest = latestByCamera.get(camera.id);
+    return {
+      id: camera.id,
+      name: camera.name,
+      zoneKind: camera.zoneKind,
+      latest: latest
+        ? {
+            thumbnail: latest.thumbnail,
+            species: latest.species,
+            animalScore: latest.animalScore,
+            dangerType: latest.dangerType,
+            capturedAt: latest.capturedAt,
+          }
+        : { thumbnail: null, emptyNote: 'No captures yet for this camera' },
+    };
+  });
 
   const summaries: CameraSummary[] = cameras.map((camera) => ({
     camera: { id: camera.id, name: camera.name, zoneKind: camera.zoneKind },
@@ -124,7 +149,7 @@ export default async function HomePage() {
         <h2>
           Cameras <span className="muted">· {regionLabel(farm.region)}</span>
         </h2>
-        <CameraManager cameras={cameras} />
+        <CameraManager cameras={cameraItems} />
       </section>
 
       <section className="stack" id="species">
@@ -176,7 +201,16 @@ export default async function HomePage() {
           <div className="scroll-area scroll-area--log" tabIndex={0}>
             <ul className="feed">
               {recent.map((row) => (
-                <li key={row.id}>
+                <CaptureRow
+                  key={row.id}
+                  preview={{
+                    thumbnail: row.thumbnail,
+                    species: row.species,
+                    animalScore: row.animalScore,
+                    dangerType: row.dangerType,
+                    capturedAt: row.capturedAt,
+                  }}
+                >
                   <span className={badgeClass(row.dangerType)}>{row.dangerType}</span>
                   <strong>{row.species}</strong>
                   <span className="muted">Animal Score {row.animalScore}%</span>
@@ -190,7 +224,7 @@ export default async function HomePage() {
                   <time className="muted" dateTime={row.capturedAt} style={{ marginLeft: 'auto' }}>
                     {new Date(row.capturedAt).toLocaleString()}
                   </time>
-                </li>
+                </CaptureRow>
               ))}
             </ul>
           </div>
