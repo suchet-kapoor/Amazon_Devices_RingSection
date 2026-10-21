@@ -459,6 +459,14 @@ export function VideoView() {
         {status}
       </p>
 
+      {/* Failure detail renders outside the frame card too - a snapshot that
+          cannot be read never reaches analyze, so the card never appeared. */}
+      {failure ? (
+        <p className="failure" role="alert">
+          {failure}
+        </p>
+      ) : null}
+
       {frame ? (
         <section className="card stack">
           <h2>Analysed frame</h2>
@@ -474,11 +482,6 @@ export function VideoView() {
           )}
           {localDetector ? (
             <p className="muted">Local detector spotted: {localDetector}.</p>
-          ) : null}
-          {failure ? (
-            <p className="failure" role="alert">
-              {failure}
-            </p>
           ) : null}
           {result ? (
             <>
@@ -534,7 +537,7 @@ export function VideoView() {
           ) : null}
           {storeError ? (
             <p className="failure" role="alert">
-              The analysis was saved, but the original file could not be stored: {storeError}
+              The original file could not be stored: {storeError}
             </p>
           ) : null}
         </section>
