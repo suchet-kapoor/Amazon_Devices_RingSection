@@ -8,6 +8,7 @@ import { getDb } from '@/lib/db';
 import { emergencyContactsFromEnv } from '@/lib/emergency-contacts';
 import { getFarm } from '@/lib/farm';
 
+import { CritterCatch } from './critter-catch';
 import { EmergencyContacts } from './emergency-contacts';
 import { NearestEmergency } from './nearest-emergency';
 import { RegionClock } from './region-clock';
@@ -63,11 +64,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           </header>
           <div className="shell">
             <aside className="sidebar">
-              <nav className="sidenav" aria-label="Sidebar">
-                <Link href="/">Dashboard</Link>
-                <Link href="/video">Camera check</Link>
-                <Link href="/check">Quick check</Link>
-              </nav>
+              <CritterCatch />
               <EmergencyContacts contacts={emergencyContactsFromEnv()} />
               <NearestEmergency />
             </aside>

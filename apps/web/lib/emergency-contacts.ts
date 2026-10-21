@@ -17,8 +17,7 @@ function telHref(phone: string): string {
  */
 export function emergencyContactsFromEnv(env: NodeJS.ProcessEnv = process.env): EmergencyContact[] {
   const contacts: EmergencyContact[] = [
-    { id: 'emergency-services', label: 'Emergency services', detail: 'Life-threatening danger or a predator near people', phone: '911', tel: '911' },
-    { id: 'poison-control', label: 'Poison Control (US)', detail: 'Human or animal poison exposure', phone: '1-800-222-1222', tel: '+18002221222' },
+    { id: 'emergency-services', label: 'Emergency services', detail: 'Life-threatening danger or a predator near people', phone: '911', tel: '911' }
   ];
   const ownPhone = env.EMERGENCY_CONTACT_PHONE?.trim();
   const ownName = env.EMERGENCY_CONTACT_NAME?.trim() || 'Farm emergency contact';
