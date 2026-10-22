@@ -18,6 +18,14 @@ export interface AppConfig {
   openRouterBaseUrl: string | undefined;
   /** Ring knowledge MCP gateway URL; when absent it is read from `mcp.json`. */
   ringMcpUrl: string | undefined;
+  /**
+   * Ring Partner API bearer token (a generated OAuth token) - powers the
+   * live section: devices, live view, snapshots and the motion hook. When
+   * absent, everything Ring-device-shaped stays disabled.
+   */
+  ringAccessToken: string | undefined;
+  /** Ring API base; the documented production value by default. */
+  ringApiBaseUrl: string | undefined;
 }
 
 function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -33,5 +41,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     openRouterModel: readEnv(env, 'OPENROUTER_VISION_MODEL'),
     openRouterBaseUrl: readEnv(env, 'OPENROUTER_BASE_URL'),
     ringMcpUrl: readEnv(env, 'RING_MCP_URL'),
+    ringAccessToken: readEnv(env, 'RING_ACCESS_TOKEN'),
+    ringApiBaseUrl: readEnv(env, 'RING_API_BASE'),
   };
 }

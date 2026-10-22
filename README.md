@@ -6,6 +6,8 @@ This demo uses media you provide; it does not connect to Ring devices or Ring de
 
 What does touch Ring's infrastructure, live: the **Ring Docs** dashboard section queries the **Ring Appstore Knowledge MCP** server (`mcp.json` → `https://knowledge.appstore-mcp.ring.amazon.dev/mcp`) for real-time `search_docs` / `get_doc` answers. The browser only ever calls this app's own `/api/ring-docs` route; the gateway is reached server-side only.
 
+And with `RING_ACCESS_TOKEN` (a generated OAuth token in root `.env.local`), the **Ring live** section talks to the **Ring Partner API** for real: device list, WHEP live video, event history and image snapshots. The auto hook watches a device's event history; on each new motion event it snapshots at the event's moment, classifies with the same model, and **saves the snapshot to S3 + one history row only when an animal is in the frame** — people-only and "no animal" frames are reported in the hook log and dropped.
+
 ## Run locally
 
 Requirements: Node.js 20 or later.

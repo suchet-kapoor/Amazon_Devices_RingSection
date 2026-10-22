@@ -143,6 +143,51 @@ export function GET(): Response {
           },
         },
       },
+      '/api/ring-live': {
+        get: {
+          summary: 'Live-section status; with a token the real Ring device list (server-side OAuth token)',
+          responses: {
+            '200': { description: 'Configured=false without a token, otherwise user + devices', content: json({ type: 'object' }) },
+            ...errors,
+          },
+        },
+        post: {
+          summary: 'The motion hook: snapshot a device at one instant, classify once; S3 + history only when an animal is detected',
+          requestBody: {
+            required: true,
+            content: json({
+              type: 'object',
+              required: ['deviceId'],
+              properties: {
+                deviceId: { type: 'string', description: 'Ring device id from the device list' },
+                cameraName: { type: 'string', description: 'Local camera name to attribute the detection to (defaults to the device id)' },
+                timestampMs: { type: 'number', description: 'Epoch ms of the event - omit for the newest snapshot' },
+              },
+            }),
+          },
+          responses: {
+            '200': { description: 'Hook outcome: animalDetected, snapshot (saved/discarded), verdict, danger, detectionId', content: json({ type: 'object' }) },
+            ...errors,
+          },
+        },
+      },
+      '/api/ring-live/events': {
+        get: {
+          summary: 'Ring event history for one device (newest first)',
+          parameters: [{ name: 'deviceId', in: 'query', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: 'Events', content: json({ type: 'object' }) }, ...errors },
+        },
+      },
+      '/api/ring-live/snapshot': {
+        get: {
+          summary: 'One on-demand frame, base64; never persisted',
+          parameters: [
+            { name: 'deviceId', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'timestampMs', in: 'query', schema: { type: 'number' } },
+          ],
+          responses: { '200': { description: 'Frame', content: json({ type: 'object' }) }, ...errors },
+        },
+      },
     },
     components: {
       schemas: {

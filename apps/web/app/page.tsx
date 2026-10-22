@@ -20,6 +20,7 @@ import { CameraManager, type CameraItem } from './camera-manager';
 import { CaptureRow } from './capture-preview';
 import { PredatorWatchlist } from './predator-watchlist';
 import { RegionForm } from './region-form';
+import { RingLive } from './ring-live';
 import { RingDocs } from './ring-docs';
 
 /**
@@ -143,6 +144,14 @@ export default async function HomePage() {
             <span className="stat-value">MCP</span>
             <span className="stat-label">Ring docs</span>
           </a>
+          <a
+            className="stat stat--link"
+            href="#ring-live"
+            aria-label="Ring live - jump to the live camera section"
+          >
+            <span className="stat-value">Live</span>
+            <span className="stat-label">Ring cameras</span>
+          </a>
         </div>
       </header>
 
@@ -175,6 +184,20 @@ export default async function HomePage() {
           Cameras <span className="muted">· {regionLabel(farm.region)}</span>
         </h2>
         <CameraManager cameras={cameraItems} />
+      </section>
+
+      <section className="stack" id="ring-live">
+        <h2>
+          Ring live <span className="muted">· devices, live view and the motion hook</span>
+        </h2>
+        <p className="muted" style={{ margin: 0 }}>
+          Real cameras via your Ring token (<code>RING_ACCESS_TOKEN</code> in <code>.env.local</code>).
+          Live video relays Ring&apos;s WHEP flow server-side; <strong>the hook</strong> watches the
+          device&apos;s event history and, on every new motion, pulls the snapshot at the event&apos;s own
+          moment and runs the classifier. An animal → snapshot saved to S3 + one history row. No animal →
+          the frame is reported and dropped, nothing is stored.
+        </p>
+        <RingLive />
       </section>
 
       <section className="stack" id="species">

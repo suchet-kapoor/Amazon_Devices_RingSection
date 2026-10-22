@@ -39,6 +39,11 @@ Machine-readable spec: [OpenAPI 3.1](${base}/openapi.json). All endpoints answer
 - \`GET ${base}/api/ring-docs\` - gateway status: \`{ server: { url, serverName, serverVersion, tools } }\`. Live proxy to the Ring Appstore Knowledge MCP (\`mcp.json\`).
 - \`GET ${base}/api/ring-docs?q=<text>&max=5\` - search Ring's documentation: \`{ query, status, confidence, hits: [{ content, score, sourceType, source }], followUpQuestions }\`. 503 \`mcp_not_configured\` when the gateway is not reachable.
 - \`GET ${base}/api/ring-docs?doc=<source>\` - full content of one document returned by a search (relative docs path or \`https://ring.com/...\` URL): \`{ source, content }\`.
+- \`GET ${base}/api/ring-live\` - live-section status; without \`RING_ACCESS_TOKEN\` in the server env it answers \`configured: false\`, with a token the real \`{ user, devices: [{ id, name, online }] }\`.
+- \`POST ${base}/api/ring-live\` - the motion hook. Body \`{ "deviceId": string, "cameraName"?: string, "timestampMs"?: number }\` → pulls the device snapshot at that instant and classifies it. An animal lands in S3 + history (\`{ animalDetected: true, snapshot: "saved", verdict, danger, detectionId }\`); no animal / people-only / model-failure frames are reported and dropped (\`{ animalDetected: false, snapshot: "discarded" }\`).
+- \`GET ${base}/api/ring-live/events?deviceId=<id>\` - Ring event history, newest first: \`{ events: [{ eventId, startMs, eventType, thirdPartyReviewed }] }\`.
+- \`GET ${base}/api/ring-live/snapshot?deviceId=<id>&timestampMs=<n>\` - on-demand frame as base64 JSON; never persisted.
+- \`POST ${base}/api/ring-live/whep?deviceId=<id>\` - server-relayed WHEP: POST an SDP offer (text) → \`200\` SDP answer + \`X-WHEP-Session\`; \`DELETE ?session=<id>\` closes it.
 
 ## Docs
 
