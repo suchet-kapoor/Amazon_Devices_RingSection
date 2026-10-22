@@ -2,7 +2,7 @@
 
 Run book for the manual (browser + HTTP) end-to-end pass. One row per scenario;
 "Defect" marks what the pass actually found. Keep this file as the regression
-checklist - rerun it after every dashboard/camera/quick-check change.
+checklist - rerun it after every dashboard/camera change.
 
 ## Dashboard (`/`)
 
@@ -30,13 +30,6 @@ checklist - rerun it after every dashboard/camera/quick-check change.
 | V7 | Pick a new file while an analysis is in flight | Old verdict must NOT pop back in; new file stays current |
 | V8 | "Identify current frame" before video metadata loads | Status message "not ready", not a silent no-op |
 | V9 | Unmount while watching | Detector loop stops (no background sampling) |
-
-## Quick check (`/check`)
-
-| ID | Scenario | Expect |
-|----|----------|--------|
-| Q1 | Analyze a frame with no camera selected | Saved as a `manual` detection with the farm region; appears in threat alerts as "Manual check" |
-| Q2 | Invalid/garbage image payload | 400, failure rendered on screen |
 
 ## Sidebar / header (all pages)
 
@@ -74,10 +67,8 @@ Record defects found during the pass here (1 line each), with the fix commit.
   - V1 PASS; V4 PASS (A8); V3 PASS live: corrupt/valid snapshot both render actionable alerts
   - V2 PASS by code-path inspection (camera != farm region -> 404 with friendly detail, checked before the model call)
   - V7, V8, V9 fixed earlier on this branch (`0b99b5d`): stale-verdict guard, not-ready feedback, unmount abort
-  - Q1 PASS live: valid photo -> frame card + 503 alert "No vision model is configured..."
-  - Q2 PASS live: corrupt photo -> detailed failure now visible (was invisible before the fix)
   - S1 PASS live (toggle on/off verified); S2 PASS (911 row + env-contact row rendered); S3 PASS live (real address -> ranked list with 911 fallback); S5 PASS (clock ticks, farm zone)
   - A1-A11 ALL PASS (see table; A6 note: unknown capture id and frameless capture are both `404 no_frame` - indistinguishable by design)
-  - DEFECT found + fixed: failure detail gated behind the frame card -> invisible on snapshot-read errors (Q2); misleading "The analysis was saved, but..." on storage errors merged with unrelated failures -> reworded; both in `/video` and `/check`
+  - DEFECT found + fixed: failure detail gated behind the frame card -> invisible on snapshot-read errors (Q2); misleading "The analysis was saved, but..." on storage errors merged with unrelated failures -> reworded; both in `/video` and `/check` (the quick-check page was removed afterwards)
   - DEFECT fixed earlier on this branch: watch-loop unmount leak, stale-verdict race, silent busy rejections, dead `window.tf` declaration
 

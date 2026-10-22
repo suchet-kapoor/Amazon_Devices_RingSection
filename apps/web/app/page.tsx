@@ -114,9 +114,6 @@ export default async function HomePage() {
             <Link className="cta" href="/video">
               Feed a frame →
             </Link>
-            <Link className="cta cta--sky" href="/check">
-              Quick check (no camera) →
-            </Link>
           </div>
         </div>
 
