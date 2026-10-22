@@ -77,6 +77,31 @@ async function ringJson(path: string): Promise<unknown> {
   return body;
 }
 
+// ---------------------------------------------------------------------------
+// Shared error mapping for the /api/ring-live* routes
+// ---------------------------------------------------------------------------
+
+interface RingErrorBody {
+  error: string;
+  detail?: string;
+}
+
+/**
+ * One error shape for every Ring-device call downstream. 401 always means
+ * "the pasted token is expired or wrong" - the section asks for a fresh one.
+ */
+export function ringErrorResponse(err: unknown): Response {
+  const failure = err as RingApiFailure;
+  if (failure && typeof failure === 'object' && typeof failure.status === 'number') {
+    const body: RingErrorBody = { error: failure.code ?? 'ring_api_error', detail: failure.message };
+    console.error(JSON.stringify({ stage: 'ring-live.error', code: failure.code, detail: failure.message }));
+    return Response.json(body, { status: failure.status });
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(JSON.stringify({ stage: 'ring-live.error', error: message }));
+  return Response.json({ error: 'internal_error', detail: message }, { status: 500 });
+}
+
 export function ringLiveConfigured(): boolean {
   return Boolean(loadConfig().ringAccessToken);
 }

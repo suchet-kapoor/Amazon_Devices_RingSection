@@ -1,6 +1,9 @@
-import { createRingWhepSession, deleteRingWhepSession, ringLiveConfigured } from '@/lib/ring-live';
-
-import { ringErrorResponse } from '../route';
+import {
+  createRingWhepSession,
+  deleteRingWhepSession,
+  ringErrorResponse,
+  ringLiveConfigured,
+} from '@/lib/ring-live';
 
 /**
  * /api/ring-live/whep?deviceId=... - server-relayed WHEP signaling.

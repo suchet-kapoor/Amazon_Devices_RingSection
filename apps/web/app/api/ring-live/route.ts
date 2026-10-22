@@ -1,6 +1,9 @@
 import { runLiveHook } from '@/lib/live-hook';
-import { jsonError } from '@/lib/http';
-import { ringLiveConfigured, ringLiveStatus, type RingApiFailure } from '@/lib/ring-live';
+import {
+  ringErrorResponse,
+  ringLiveConfigured,
+  ringLiveStatus,
+} from '@/lib/ring-live';
 
 /**
  * /api/ring-live - the live section's status and hook endpoints.
@@ -12,25 +15,6 @@ import { ringLiveConfigured, ringLiveStatus, type RingApiFailure } from '@/lib/r
  *        dropped.
  */
 export const dynamic = 'force-dynamic';
-
-interface RingErrorBody {
-  error: string;
-  detail?: string;
-}
-
-/**
- * One error shape for every Ring-device call downstream. 401 always means
- * "the pasted token is expired or wrong" - the section asks for a fresh one.
- */
-export function ringErrorResponse(err: unknown): Response {
-  const failure = err as RingApiFailure;
-  if (failure && typeof failure === 'object' && typeof failure.status === 'number') {
-    const body: RingErrorBody = { error: failure.code ?? 'ring_api_error', detail: failure.message };
-    console.error(JSON.stringify({ stage: 'ring-live.error', code: failure.code, detail: failure.message }));
-    return Response.json(body, { status: failure.status });
-  }
-  return jsonError(err);
-}
 
 export async function GET(): Promise<Response> {
   try {

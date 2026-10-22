@@ -22,6 +22,8 @@ Open <http://localhost:3000>. The app uses a local PGlite database by default. `
 
 The **Ring docs** section of the dashboard is backed by the Ring MCP config at the repository root (`mcp.json`). Point `RING_MCP_URL` at a different gateway in `.env.local` to override it.
 
+Set `RING_ACCESS_TOKEN` (a fresh OAuth token from the Ring Dev Portal) in the same root `.env.local` to enable the **Ring live** section - real cameras, live video and the motion hook. **Restart `npm run dev` after any `.env.local` change** (tokens included): the runner publishes the env files to the Next workers at boot.
+
 To enable animal identification, add your OpenRouter key to the repository-root `.env.local`:
 
 ```env

@@ -2,10 +2,55 @@
  * Environment loading for the demo.
  *
  * Only a few concerns read from env: where the database lives, the vision
- * model that identifies the animal (OpenRouter), and - optional - the Ring
- * knowledge MCP gateway override (the default comes from `mcp.json`).
- * Ring's device API (OAuth, webhooks, HMAC, token vault) stays out of scope.
+ * model that identifies the animal (OpenRouter), the Ring knowledge MCP
+ * gateway override (`mcp.json` is the default) and the Ring Partner API
+ * token for the live section.
  */
+
+import path from 'node:path';
+import { statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+/**
+ * Next dev spawns server workers that hand-pick env entries next.config.mjs
+ * loaded - so the root `.env.local` is re-applied here, on whatever process
+ * actually runs this module. First loadConfig() call pays for one read;
+ * every later one is a no-op.
+ */
+let rootEnvLoaded = false;
+
+function loadRootEnvOnce(): void {
+  if (rootEnvLoaded) return;
+  rootEnvLoaded = true;
+  if (process.env.DATABASE_URL || process.env.RING_ACCESS_TOKEN) return; // already present
+  try {
+    // @next/env is a devDependency: at runtime, only the dev flows need it.
+    const require = createRequire(import.meta.url);
+    require('@next/env').loadEnvConfig(findRootEnvDir());
+  } catch (err) {
+    console.warn(
+      JSON.stringify({
+        stage: 'config.root_env_failed',
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
+}
+
+function findRootEnvDir(): string {
+  let dir = process.cwd();
+  for (let hop = 0; hop < 4; hop += 1) {
+    try {
+      if (statSync(path.join(dir, '.env.local')).isFile()) return dir;
+    } catch {
+      // keep walking up
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return dir;
+    dir = parent;
+  }
+  return dir;
+}
 
 export interface AppConfig {
   /** Postgres connection string; when absent the embedded PGlite database is used. */
@@ -34,6 +79,7 @@ function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  loadRootEnvOnce();
   return {
     databaseUrl: readEnv(env, 'DATABASE_URL'),
     pgliteDataDir: readEnv(env, 'PGLITE_DATA_DIR') ?? '.pglite',

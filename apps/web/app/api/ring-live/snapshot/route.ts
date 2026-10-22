@@ -1,7 +1,5 @@
 import { jsonError } from '@/lib/http';
-import { fetchRingSnapshot } from '@/lib/ring-live';
-
-import { ringErrorResponse } from '../route';
+import { fetchRingSnapshot, ringErrorResponse } from '@/lib/ring-live';
 
 /**
  * /api/ring-live/snapshot?deviceId=...&timestampMs=... - pull one frame of a

@@ -1,7 +1,5 @@
 import { jsonError } from '@/lib/http';
-import { listRingEvents } from '@/lib/ring-live';
-
-import { ringErrorResponse } from '../route';
+import { listRingEvents, ringErrorResponse } from '@/lib/ring-live';
 
 /**
  * /api/ring-live/events?deviceId=... - real event history for one device
