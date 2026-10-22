@@ -44,6 +44,5 @@ See `.env.example` for the available environment variables. Never add real crede
 - `/video` — analyze a video or snapshot
 - `/openapi.json` — API specification
 - `/llms.txt` — site and API guide for AI tools
-- [`docs/E2E_SCENARIOS.md`](docs/E2E_SCENARIOS.md) — end-to-end test scenarios
 - [`docs/FRICTION_LOG.md`](docs/FRICTION_LOG.md) — development notes
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution workflow
