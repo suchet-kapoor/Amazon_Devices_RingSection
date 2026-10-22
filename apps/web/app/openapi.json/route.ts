@@ -124,6 +124,25 @@ export function GET(): Response {
           responses: { '200': { description: 'Origin + nearest stations', content: json({ type: 'object' }) }, '404': { description: 'Address not found', content: json(error) }, ...errors },
         },
       },
+      '/api/ring-docs': {
+        get: {
+          summary: 'Search or read Ring documentation through the Ring Appstore Knowledge MCP server (live)',
+          description: 'Server-side proxy to the gateway configured in mcp.json. Omit params for gateway status; q searches, doc reads a full document.',
+          parameters: [
+            { name: 'q', in: 'query', schema: { type: 'string', minLength: 3, maxLength: 300 }, description: 'Natural-language search over Ring docs' },
+            { name: 'max', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 10 }, description: 'Max results (default 5)' },
+            { name: 'doc', in: 'query', schema: { type: 'string', maxLength: 500 }, description: 'File path or ring.com URL from a search result' },
+          ],
+          responses: {
+            '200': {
+              description: 'Search results, full document, or gateway status',
+              content: json({ type: 'object' }),
+            },
+            '503': { description: 'mcp_not_configured', content: json(error) },
+            ...errors,
+          },
+        },
+      },
     },
     components: {
       schemas: {

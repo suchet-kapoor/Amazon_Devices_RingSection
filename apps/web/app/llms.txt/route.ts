@@ -19,7 +19,7 @@ Animal ID is an estimate - a human should check the frame before acting. In imme
 
 ## Pages
 
-- [Dashboard](${base}/): cameras, recent threat alerts, species by camera, farm region and predator watchlist. Sections: [#cameras](${base}/#cameras), [#species](${base}/#species), [#threat-alerts](${base}/#threat-alerts).
+- [Dashboard](${base}/): cameras, recent threat alerts, species by camera, farm region and predator watchlist, plus a live Ring documentation search backed by the Ring Appstore Knowledge MCP server. Sections: [#cameras](${base}/#cameras), [#species](${base}/#species), [#threat-alerts](${base}/#threat-alerts), [#ring-docs](${base}/#ring-docs).
 - [Camera check](${base}/video): load a video or snapshot, pick a camera, analyze a frame.
 
 ## API
@@ -36,6 +36,9 @@ Machine-readable spec: [OpenAPI 3.1](${base}/openapi.json). All endpoints answer
 - \`POST ${base}/api/media\` - store the original photo/video. multipart/form-data field \`file\` (jpeg, png, webp, gif, mp4, webm, mov; max 100 MB) and optional \`detectionId\`.
 - \`GET ${base}/api/media/<id>\` and \`GET ${base}/api/captures/<detectionId>\` - 302 to a short-lived signed URL of the stored file / analyzed frame.
 - \`GET ${base}/api/emergency-nearby?address=<text>\` or \`?lat=<n>&lon=<n>\` - nearest police stations from OpenStreetMap.
+- \`GET ${base}/api/ring-docs\` - gateway status: \`{ server: { url, serverName, serverVersion, tools } }\`. Live proxy to the Ring Appstore Knowledge MCP (\`mcp.json\`).
+- \`GET ${base}/api/ring-docs?q=<text>&max=5\` - search Ring's documentation: \`{ query, status, confidence, hits: [{ content, score, sourceType, source }], followUpQuestions }\`. 503 \`mcp_not_configured\` when the gateway is not reachable.
+- \`GET ${base}/api/ring-docs?doc=<source>\` - full content of one document returned by a search (relative docs path or \`https://ring.com/...\` URL): \`{ source, content }\`.
 
 ## Docs
 

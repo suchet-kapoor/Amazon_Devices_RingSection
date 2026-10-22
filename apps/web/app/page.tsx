@@ -20,6 +20,7 @@ import { CameraManager, type CameraItem } from './camera-manager';
 import { CaptureRow } from './capture-preview';
 import { PredatorWatchlist } from './predator-watchlist';
 import { RegionForm } from './region-form';
+import { RingDocs } from './ring-docs';
 
 /**
  * Predator Guard dashboard.
@@ -133,6 +134,14 @@ export default async function HomePage() {
           >
             <span className="stat-value">{recent.length}</span>
             <span className="stat-label">Recent alerts</span>
+          </a>
+          <a
+            className="stat stat--link"
+            href="#ring-docs"
+            aria-label="Ring docs - jump to the Ring documentation search"
+          >
+            <span className="stat-value">MCP</span>
+            <span className="stat-label">Ring docs</span>
           </a>
         </div>
       </header>
@@ -248,6 +257,19 @@ export default async function HomePage() {
             </ul>
           </div>
         )}
+      </section>
+
+      <section className="stack" id="ring-docs">
+        <h2>
+          Ring docs <span className="muted">· live via the Ring Appstore Knowledge MCP</span>
+        </h2>
+        <p className="muted" style={{ margin: 0 }}>
+          Searches against Ring&apos;s own documentation through the Ring MCP gateway
+          (<code>mcp.json</code>, tools <code>search_docs</code> + <code>get_doc</code>). Every answer
+          comes from Ring&apos;s servers at request time — nothing is cached or hand-written. Handy while
+          setting up cameras, webhook intake or the linking flow.
+        </p>
+        <RingDocs />
       </section>
     </main>
   );

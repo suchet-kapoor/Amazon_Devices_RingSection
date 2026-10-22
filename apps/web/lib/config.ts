@@ -1,10 +1,10 @@
 /**
  * Environment loading for the demo.
  *
- * Only two concerns read from env: where the database lives, and which
- * vision model identifies the animal (OpenRouter). Everything Ring-specific
- * (OAuth, webhooks, HMAC, token vault, simulator flags) left the codebase
- * with the webhook pipeline.
+ * Only a few concerns read from env: where the database lives, the vision
+ * model that identifies the animal (OpenRouter), and - optional - the Ring
+ * knowledge MCP gateway override (the default comes from `mcp.json`).
+ * Ring's device API (OAuth, webhooks, HMAC, token vault) stays out of scope.
  */
 
 export interface AppConfig {
@@ -16,6 +16,8 @@ export interface AppConfig {
   openRouterApiKey: string | undefined;
   openRouterModel: string | undefined;
   openRouterBaseUrl: string | undefined;
+  /** Ring knowledge MCP gateway URL; when absent it is read from `mcp.json`. */
+  ringMcpUrl: string | undefined;
 }
 
 function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -30,5 +32,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     openRouterApiKey: readEnv(env, 'OPENROUTER_API_KEY'),
     openRouterModel: readEnv(env, 'OPENROUTER_VISION_MODEL'),
     openRouterBaseUrl: readEnv(env, 'OPENROUTER_BASE_URL'),
+    ringMcpUrl: readEnv(env, 'RING_MCP_URL'),
   };
 }
