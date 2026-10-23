@@ -138,14 +138,6 @@ export default async function HomePage() {
           </a>
           <a
             className="stat stat--link"
-            href="#ring-docs"
-            aria-label="Ring docs - jump to the Ring documentation search"
-          >
-            <span className="stat-value">MCP</span>
-            <span className="stat-label">Ring docs</span>
-          </a>
-          <a
-            className="stat stat--link"
             href="#ring-live"
             aria-label="Ring live - jump to the live camera section"
           >
