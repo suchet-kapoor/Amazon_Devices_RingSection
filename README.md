@@ -8,6 +8,40 @@ What does touch Ring's infrastructure, live: the **Ring Docs** dashboard section
 
 And with `RING_ACCESS_TOKEN` (a generated OAuth token in root `.env.local`), the **Ring live** section talks to the **Ring Partner API** for real: device list, WHEP live video, event history and image snapshots. The auto hook watches a device's event history; on each new motion event it snapshots at the event's moment, classifies with the same model, and **saves the snapshot to S3 + one history row only when an animal is in the frame** — people-only and "no animal" frames are reported in the hook log and dropped.
 
+## Product walkthrough
+
+Live demo: <https://predator-guard.vercel.app>
+
+### Dashboard — home
+
+The main dashboard. Feed a video frame or snapshot, pick the camera it belongs to, and the AI model names the animal with an **Animal Score** and a **Danger Type** on screen. Live camera, alert and camera counts sit up top, and the farm region picker tunes danger rules to the predators that actually live around your farm.
+
+![Dashboard home](docs/images/HomePage.png)
+
+### Sidebar — emergency contacts and nearest police
+
+A quick-access sidebar with one-tap **Call / Share** actions for emergency services (911) and your own predator-alert contact, plus a nearest-police lookup from your shared location.
+
+![Sidebar with emergency contacts and nearest police](docs/images/SideBar.png)
+
+### Cameras — manage cameras and Ring live
+
+Register cameras per zone (feed shed, coop, gate, pasture — barn, coop, driveway and pasture cams in the shot) and manage them from this panel. Below it, the **Ring live** section connects real Ring cameras: devices, WHEP live video and a motion hook that snapshots on every new motion event and runs the classifier — saving to S3 and history only when an animal is in the frame.
+
+![Camera management and Ring live](docs/images/Camera.png)
+
+### Camera check — live frame analysis
+
+Run a check on demand: load one of your own videos or a snapshot (or paste/drop one from the Ring live view), pick the camera, and the frame is sent to the AI model. The answer lands on screen — Animal Score and Danger Type — and is saved to that camera's Postgres history in parallel.
+
+![Camera check live frame analysis](docs/images/Camera_CheckPage.png)
+
+### Threat alerts — detections per camera
+
+Per-camera detection summaries (species counts and peak danger) and a live threat-alert feed with the analyzed snapshot, confidence, camera, zone and timestamp — a caracal at 90% animal score on Barn cam in this capture.
+
+![Threat alerts by camera](docs/images/Thread_Alreats.png)
+
 ## Run locally
 
 Requirements: Node.js 20 or later.
