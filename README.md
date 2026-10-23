@@ -18,12 +18,6 @@ The main dashboard. Feed a video frame or snapshot, pick the camera it belongs t
 
 ![Dashboard home](docs/images/HomePage.png)
 
-### Sidebar — emergency contacts and nearest police
-
-A quick-access sidebar with one-tap **Call / Share** actions for emergency services (911) and your own predator-alert contact, plus a nearest-police lookup from your shared location.
-
-![Sidebar with emergency contacts and nearest police](docs/images/SideBar.png)
-
 ### Cameras — manage cameras and Ring live
 
 Register cameras per zone (feed shed, coop, gate, pasture — barn, coop, driveway and pasture cams in the shot) and manage them from this panel. Below it, the **Ring live** section connects real Ring cameras: devices, WHEP live video and a motion hook that snapshots on every new motion event and runs the classifier — saving to S3 and history only when an animal is in the frame.
@@ -35,12 +29,6 @@ Register cameras per zone (feed shed, coop, gate, pasture — barn, coop, drivew
 Run a check on demand: load one of your own videos or a snapshot (or paste/drop one from the Ring live view), pick the camera, and the frame is sent to the AI model. The answer lands on screen — Animal Score and Danger Type — and is saved to that camera's Postgres history in parallel.
 
 ![Camera check live frame analysis](docs/images/Camera_CheckPage.png)
-
-### Threat alerts — detections per camera
-
-Per-camera detection summaries (species counts and peak danger) and a live threat-alert feed with the analyzed snapshot, confidence, camera, zone and timestamp — a caracal at 90% animal score on Barn cam in this capture.
-
-![Threat alerts by camera](docs/images/Thread_Alreats.png)
 
 ## Run locally
 
