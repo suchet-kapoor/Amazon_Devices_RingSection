@@ -23,7 +23,13 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request): Promise<Response> {
   try {
     if (!ringLiveConfigured()) {
-      return Response.json({ error: 'ring_not_configured' }, { status: 503 });
+      return Response.json(
+        {
+          error: 'ring_not_configured',
+          detail: 'Live cameras are not connected on this deployment.',
+        },
+        { status: 503 },
+      );
     }
     const deviceId = new URL(request.url).searchParams.get('deviceId')?.trim();
     if (!deviceId || deviceId.length > 200) {

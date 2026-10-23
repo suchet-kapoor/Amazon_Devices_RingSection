@@ -23,7 +23,7 @@ export async function GET(): Promise<Response> {
         {
           configured: false,
           detail:
-            'Set RING_ACCESS_TOKEN in the root .env.local (an OAuth token from the Ring Dev Portal) to enable live cameras.',
+            'A Ring account needs to be linked before devices, live video or motion events can appear here.',
         },
         { status: 200 },
       );

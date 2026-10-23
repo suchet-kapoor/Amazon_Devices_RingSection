@@ -191,8 +191,8 @@ export default async function HomePage() {
           Ring live <span className="muted">· devices, live view and the motion hook</span>
         </h2>
         <p className="muted" style={{ margin: 0 }}>
-          Real cameras via your Ring token (<code>RING_ACCESS_TOKEN</code> in <code>.env.local</code>).
-          Live video relays Ring&apos;s WHEP flow server-side; <strong>the hook</strong> watches the
+          Real Ring cameras when a Ring account is connected — devices, live video and motion
+          events. Live video relays Ring&apos;s WHEP flow server-side; <strong>the hook</strong> watches the
           device&apos;s event history and, on every new motion, pulls the snapshot at the event&apos;s own
           moment and runs the classifier. An animal → snapshot saved to S3 + one history row. No animal →
           the frame is reported and dropped, nothing is stored.

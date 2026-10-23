@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEv
 import { regionLabel } from '@predator-guard/rules';
 
 import { bestAnimal, formatTimeframe } from '@/lib/animal-filter';
+import { errorText } from '@/lib/error-text';
 import { linkMedia, uploadMedia, type UploadedMedia } from '@/lib/upload-media';
 import { zoneLabel } from '@/lib/zones';
 
@@ -254,11 +255,7 @@ export function VideoView() {
           | null;
         if (seq !== analysisSeq.current) return;
         if (!response.ok) {
-          const message =
-            body?.detail ??
-            body?.error ??
-            `Identification failed (HTTP ${response.status}).`;
-          setFailure(message);
+          setFailure(errorText(body, response.status, 'Identification failed'));
           setStatus('Identification failed - see below.');
           return;
         }
@@ -596,7 +593,7 @@ export function VideoView() {
               </p>
             </>
           ) : null}
-          {storing ? <p className="muted">Storing the original file in the bucket...</p> : null}
+          {storing ? <p className="muted">Saving the original file...</p> : null}
           {stored ? (
             <p className="muted">
               Original {stored.kind} stored ({Math.round(stored.sizeBytes / 1024)} kB) -{' '}

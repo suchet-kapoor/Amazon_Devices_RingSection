@@ -76,12 +76,12 @@ export function RingDocs() {
         const body = (await response.json().catch(() => null)) as StatusBody | null;
         if (!alive) return;
         if (!response.ok || !body?.server?.serverName) {
-          setServerError(body?.detail ?? body?.error ?? `Status check failed (HTTP ${response.status}).`);
+          setServerError(body?.detail ?? `The documentation status check failed (HTTP ${response.status}).`);
           return;
         }
         setServerName(`${body.server.serverName} v${body.server.serverVersion ?? '?'}`);
       } catch {
-        if (alive) setServerError('Could not reach /api/ring-docs.');
+        if (alive) setServerError('The documentation search could not reach the server.');
       }
     })();
     return () => {
@@ -99,7 +99,7 @@ export function RingDocs() {
       const response = await fetch(`/api/ring-docs?q=${encodeURIComponent(q.trim())}`);
       const body = (await response.json().catch(() => null)) as SearchBody | null;
       if (!response.ok) {
-        setSearchError(body?.detail ?? body?.error ?? `Search failed (HTTP ${response.status}).`);
+        setSearchError(body?.detail ?? `The documentation search failed (HTTP ${response.status}).`);
         return;
       }
       setConfidence(body?.confidence ?? null);
@@ -107,7 +107,7 @@ export function RingDocs() {
       setFollowUps(body?.followUpQuestions ?? []);
       setQuery(q);
     } catch {
-      setSearchError('Search request failed.');
+      setSearchError('The documentation search could not reach the server.');
     } finally {
       setBusy(false);
     }
@@ -121,12 +121,12 @@ export function RingDocs() {
       const response = await fetch(`/api/ring-docs?doc=${encodeURIComponent(uri)}`);
       const body = (await response.json().catch(() => null)) as DocBody | null;
       if (!response.ok || !body?.content) {
-        setDocError(body?.detail ?? body?.error ?? `Reading the doc failed (HTTP ${response.status}).`);
+        setDocError(body?.detail ?? `The document could not be loaded (HTTP ${response.status}).`);
         return;
       }
       setDoc({ source: body.source ?? uri, content: body.content });
     } catch {
-      setDocError('Doc request failed.');
+      setDocError('The document could not be loaded. Try again in a moment.');
     } finally {
       setDocBusy(false);
     }
@@ -140,7 +140,7 @@ export function RingDocs() {
   if (serverError) {
     return (
       <p className="failure" role="alert">
-        Ring docs are offline right now: {serverError}
+        {serverError}
       </p>
     );
   }

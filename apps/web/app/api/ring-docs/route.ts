@@ -26,8 +26,11 @@ function mcpErrorResponse(err: unknown): Response {
   console.error(JSON.stringify({ stage: 'ring-mcp.error', error: message }));
   const notConfigured = message.startsWith('mcp_not_configured');
   const status: RouteError = notConfigured
-    ? { error: 'mcp_not_configured', detail: 'Add the Ring knowledge MCP server to mcp.json (or set RING_MCP_URL) and restart.' }
-    : { error: 'ring_mcp_unavailable', detail: message };
+    ? { error: 'mcp_not_configured', detail: 'Ring documentation search is not configured on this deployment.' }
+    : {
+        error: 'ring_mcp_unavailable',
+        detail: 'Ring documentation search is unavailable right now. Try again in a moment.',
+      };
   return Response.json(status, { status: notConfigured ? 503 : 502 });
 }
 

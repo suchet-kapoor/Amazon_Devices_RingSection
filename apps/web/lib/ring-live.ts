@@ -21,7 +21,7 @@ export interface RingApiFailure extends Error {
   code: string;
 }
 
-/** One failed Ring call - the JSON:API error detail when Ring provided one. */
+/** One failed Ring call - mapped to a sentence a visitor can act on. */
 function ringApiFailure(status: number, body: unknown): RingApiFailure {
   const errors = (body as { errors?: Array<{ title?: string; detail?: string }> })?.errors;
   const detail = errors?.[0]?.detail ?? errors?.[0]?.title;
@@ -33,7 +33,15 @@ function ringApiFailure(status: number, body: unknown): RingApiFailure {
         : status === 429
           ? 'rate_limited'
           : 'ring_api_error';
-  const failure = new Error(detail ?? `Ring API returned HTTP ${status}`) as RingApiFailure;
+  const friendly: Record<number, string> = {
+    401: 'The Ring access token has expired or was rejected. Add a fresh RING_ACCESS_TOKEN and restart the app to reconnect.',
+    403: 'Ring refused this request for this account.',
+    416: 'No frame is available from this camera at that time yet.',
+    429: 'Ring is rate-limiting requests. Wait a moment and try again.',
+  };
+  const failure = new Error(
+    friendly[status] ?? detail ?? `The live view request failed (HTTP ${status}).`,
+  ) as RingApiFailure;
   failure.status = status;
   failure.code = code;
   return failure;
@@ -51,7 +59,7 @@ async function ringFetch(
   const config = loadConfig();
   const token = config.ringAccessToken;
   if (!token) {
-    const failure = new Error('No RING_ACCESS_TOKEN is set') as RingApiFailure;
+    const failure = new Error('Live cameras are not connected on this deployment.') as RingApiFailure;
     failure.status = 503;
     failure.code = 'ring_not_configured';
     throw failure;
@@ -99,7 +107,11 @@ export function ringErrorResponse(err: unknown): Response {
   }
   const message = err instanceof Error ? err.message : String(err);
   console.error(JSON.stringify({ stage: 'ring-live.error', error: message }));
-  return Response.json({ error: 'internal_error', detail: message }, { status: 500 });
+  const detail =
+    process.env.NODE_ENV === 'production'
+      ? 'The live view hit an unexpected error. Try again in a moment.'
+      : message;
+  return Response.json({ error: 'internal_error', detail }, { status: 500 });
 }
 
 export function ringLiveConfigured(): boolean {

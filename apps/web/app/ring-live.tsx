@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 
+import { errorText } from '@/lib/error-text';
+
 /**
  * Ring live - real devices from a pasted OAuth token, live video via WHEP,
  * and the auto hook: poll event history, and on every new motion event pull
@@ -146,7 +148,7 @@ export function RingLive() {
         const body = (await response.json().catch(() => null)) as StatusBody | null;
         if (!alive) return;
         if (!response.ok) {
-          setStatusError(body?.detail ?? body?.error ?? `Status check failed (HTTP ${response.status}).`);
+          setStatusError(errorText(body, response.status, 'The live status check failed'));
           return;
         }
         setStatus(body);
@@ -154,7 +156,7 @@ export function RingLive() {
         deviceRef.current = first ?? null;
         setDeviceId(first?.id ?? '-');
       } catch {
-        if (alive) setStatusError('Could not reach /api/ring-live.');
+        if (alive) setStatusError('The live view could not reach the server.');
       }
     })();
     return () => {
@@ -215,7 +217,7 @@ export function RingLive() {
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as HookBody | null;
-        setLiveError(body?.detail ?? body?.error ?? `Live view failed (HTTP ${response.status}).`);
+        setLiveError(errorText(body, response.status, 'The live view could not start'));
         setLiveState('idle');
         pc.close();
         pcRef.current = null;
@@ -262,7 +264,7 @@ export function RingLive() {
         const response = await fetch(`/api/ring-live/snapshot?deviceId=${encodeURIComponent(device.id)}`);
         const body = (await response.json().catch(() => null)) as { imageBase64?: string; error?: string; detail?: string };
         if (!response.ok || !body?.imageBase64) {
-          setPreviewNote(body?.detail ?? body?.error ?? `Snapshot failed (HTTP ${response.status}).`);
+          setPreviewNote(errorText(body, response.status, 'The snapshot could not be taken'));
           return;
         }
         dataUrl = `data:image/jpeg;base64,${body.imageBase64}`;
@@ -302,7 +304,12 @@ export function RingLive() {
       const body = (await response.json().catch(() => null)) as HookBody | null;
       if (!response.ok || !body) {
         setLog((rows) => [
-          { at, event: type, outcome: `Hook failed (HTTP ${response.status}).`, animal: undefined },
+          {
+            at,
+            event: type,
+            outcome: errorText(body, response.status, 'The motion check failed'),
+            animal: undefined,
+          },
           ...rows,
         ]);
         return;
@@ -379,23 +386,19 @@ export function RingLive() {
   if (statusError) {
     return (
       <p className="failure" role="alert">
-        Ring live is unavailable right now: {statusError}
+        {statusError}
       </p>
     );
   }
   if (!status) {
-    return <p className="muted">Checking the Ring token…</p>;
+    return <p className="muted">Checking live camera access…</p>;
   }
   if (!status.configured) {
     return (
       <div className="card stack-sm">
-        <strong>Live cameras are switched off</strong>
+        <strong>Live cameras are not connected on this deployment</strong>
         <p className="muted" style={{ margin: 0 }}>
           {status.detail}
-        </p>
-        <p className="muted" style={{ margin: 0 }}>
-          Paste a fresh token into <code>.env.local</code> as{' '}
-          <code>RING_ACCESS_TOKEN=…</code> and restart <code>npm run dev</code>.
         </p>
       </div>
     );
@@ -404,9 +407,9 @@ export function RingLive() {
   if (devices.length === 0) {
     return (
       <div className="card stack-sm">
-        <strong>Token accepted, but no devices are linked to this account yet.</strong>
+        <strong>Ring is connected, but no cameras are linked to this account yet.</strong>
         <p className="muted" style={{ margin: 0 }}>
-          Link the camera in the Ring app / Dev Portal playground, then reload.
+          Add a camera in the Ring app, then reload this page.
         </p>
       </div>
     );
