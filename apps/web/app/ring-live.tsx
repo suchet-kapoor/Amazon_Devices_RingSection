@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 
 /**
  * Ring live - real devices from a pasted OAuth token, live video via WHEP,
@@ -51,6 +51,70 @@ interface LogEntry {
 
 const HOOK_EVENT_SKIP = new Set(['on_demand']);
 const HOOK_POLL_MS = 12_000;
+
+/** Grab the frame that is on screen right now from the live WHEP video. */
+function grabLiveFrame(video: HTMLVideoElement | null): { dataUrl: string; png: Promise<Blob | null> } | null {
+  if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return {
+    dataUrl: canvas.toDataURL('image/jpeg', 0.92),
+    png: new Promise((resolve) => canvas.toBlob(resolve, 'image/png')),
+  };
+}
+
+/** Clipboard only accepts image/png everywhere, so convert anything else first. */
+function toPngBlob(blob: Blob): Promise<Blob | null> {
+  if (blob.type === 'image/png') return Promise.resolve(blob);
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        resolve(null);
+        return;
+      }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(resolve, 'image/png');
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    image.src = url;
+  });
+}
+
+/**
+ * Clipboard writes are best-effort: browsers gate them on secure context +
+ * focus + the click gesture. Calling this with the still-pending blob (instead
+ * of awaiting the blob first) keeps the gesture alive - the browser resolves
+ * the ClipboardItem promise itself.
+ */
+async function copyImageToClipboard(blob: Blob | Promise<Blob | null>): Promise<boolean> {
+  try {
+    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) return false;
+    const png = Promise.resolve(blob)
+      .then((value) => (value ? toPngBlob(value) : null))
+      .then((value) => {
+        if (!value) throw new Error('No image to copy.');
+        return value;
+      });
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function RingLive() {
   const [status, setStatus] = useState<StatusBody | null>(null);
@@ -176,25 +240,53 @@ export function RingLive() {
   liveStateRef.current = liveState;
 
   // --- preview + hook -------------------------------------------------------
+  /**
+   * "Check now" grabs the frame the farmer is looking at: inside a live WHEP
+   * session that is a canvas copy of the playing video, otherwise the newest
+   * snapshot from Ring. Either way the picture is copied to the clipboard so
+   * Camera check can take it with Ctrl+V (or a drag of this preview).
+   */
   const checkNow = useCallback(async () => {
     const device = deviceRef.current;
     if (!device || previewBusy) return;
     setPreviewBusy(true);
     setPreviewNote(null);
     try {
-      const response = await fetch(`/api/ring-live/snapshot?deviceId=${encodeURIComponent(device.id)}`);
-      const body = (await response.json().catch(() => null)) as { imageBase64?: string; mediaTimestampMs?: number; error?: string; detail?: string };
-      if (!response.ok || !body?.imageBase64) {
-        setPreviewNote(body?.detail ?? body?.error ?? `Snapshot failed (HTTP ${response.status}).`);
-        return;
+      const live = grabLiveFrame(videoRef.current);
+      // Start the clipboard write in the click itself, before any await, or
+      // browsers drop the user gesture and refuse the write.
+      const copiedTask = live ? copyImageToClipboard(live.png) : null;
+
+      let dataUrl = live?.dataUrl ?? null;
+      if (!dataUrl) {
+        const response = await fetch(`/api/ring-live/snapshot?deviceId=${encodeURIComponent(device.id)}`);
+        const body = (await response.json().catch(() => null)) as { imageBase64?: string; error?: string; detail?: string };
+        if (!response.ok || !body?.imageBase64) {
+          setPreviewNote(body?.detail ?? body?.error ?? `Snapshot failed (HTTP ${response.status}).`);
+          return;
+        }
+        dataUrl = `data:image/jpeg;base64,${body.imageBase64}`;
       }
-      setPreviewUrl(`data:image/jpeg;base64,${body.imageBase64}`);
+
+      setPreviewUrl(dataUrl);
+      const copied = await (copiedTask ?? copyImageToClipboard((await fetch(dataUrl)).blob()));
+      setPreviewNote(
+        copied
+          ? 'Snapshot copied — open Camera check and press Ctrl+V, or drag this preview onto its snapshot box.'
+          : 'Snapshot ready — drag this preview onto Camera check, or save it with the snapshot picker.',
+      );
     } catch {
       setPreviewNote('Snapshot request failed.');
     } finally {
       setPreviewBusy(false);
     }
   }, [previewBusy]);
+
+  function onPreviewDragStart(event: DragEvent<HTMLImageElement>) {
+    if (!previewUrl) return;
+    event.dataTransfer.setData('text/plain', previewUrl);
+    event.dataTransfer.effectAllowed = 'copy';
+  }
 
   const runHook = useCallback(async (timestampMs: number | undefined, type: string) => {
     const device = deviceRef.current;
@@ -342,8 +434,13 @@ export function RingLive() {
             {liveState === 'connecting' ? 'Connecting…' : 'Stop live view'}
           </button>
         )}
-        <button type="button" onClick={() => void checkNow()} disabled={previewBusy}>
-          {previewBusy ? 'Fetching…' : 'Check now (snapshot)'}
+        <button
+          type="button"
+          onClick={() => void checkNow()}
+          disabled={previewBusy}
+          title="Grab the current live frame and copy it for Camera check"
+        >
+          {previewBusy ? 'Snapping…' : 'Check now (snapshot)'}
         </button>
         <button type="button" onClick={() => setWatching((on) => !on)} className={watching ? 'watching-on' : ''}>
           {watching ? 'Hook: ON — stop' : 'Hook: watch for motion'}
@@ -363,13 +460,43 @@ export function RingLive() {
             style={{ width: '100%', maxHeight: '420px', background: '#000' }}
           />
         ) : previewUrl ? (
-          <img src={previewUrl} alt="Latest Ring snapshot" style={{ width: '100%', maxHeight: '420px' }} />
+          <img
+            src={previewUrl}
+            alt="Latest Ring snapshot"
+            draggable
+            onDragStart={onPreviewDragStart}
+            title="Drag onto Camera check, or press Ctrl+V there"
+            style={{
+              width: '100%',
+              maxHeight: '420px',
+              objectFit: 'contain',
+              background: '#000',
+              cursor: 'grab',
+            }}
+          />
         ) : (
           <p className="muted" style={{ margin: 0 }}>
-            Live video plays via WHEP; “Check now” previews the newest frame instead. Both need the device
-            online.
+            Live video plays via WHEP; “Check now” grabs the current live frame and copies it for
+            Camera check. Both need the device online.
           </p>
         )}
+        {previewUrl && liveState !== 'idle' ? (
+          <img
+            src={previewUrl}
+            alt="Snapshot taken from the live view"
+            draggable
+            onDragStart={onPreviewDragStart}
+            title="Drag onto Camera check, or press Ctrl+V there"
+            style={{
+              width: '100%',
+              maxHeight: '220px',
+              objectFit: 'contain',
+              background: '#000',
+              borderRadius: '0.4rem',
+              cursor: 'grab',
+            }}
+          />
+        ) : null}
         {session ? <p className="muted" style={{ margin: 0 }}>WHEP session {session.slice(0, 12)}…</p> : null}
         {previewNote ? <p className="muted" style={{ margin: 0 }}>{previewNote}</p> : null}
       </div>
