@@ -30,6 +30,12 @@ Run a check on demand: load one of your own videos or a snapshot (or paste/drop 
 
 ![Camera check live frame analysis](docs/images/Camera_CheckPage.png)
 
+### Threat alert in action
+
+When a predator triggers a camera, the dashboard flags it right away — a full-width **THREAT** banner over the live frame, with the animal's name, Animal Score and danger type on screen.
+
+![Threat alert in action](docs/images/ThreatAlert.gif)
+
 ## Run locally
 
 Requirements: Node.js 20 or later.
